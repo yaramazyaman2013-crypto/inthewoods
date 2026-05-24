@@ -70,6 +70,23 @@
   #dead h1 { color: #e15a5a; font-size: 56px; letter-spacing: 6px; }
   #dead button { background: #ffb86b; border: 0; padding: 12px 24px; font-weight: 700; border-radius: 5px; cursor: pointer; }
   .tip { font-size: 11px; color: #888; line-height: 1.5; }
+  #chestUI {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: #1a1a1a; border: 2px solid #ffb86b; border-radius: 8px;
+    padding: 16px; display: none; z-index: 5; min-width: 300px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.8);
+  }
+  #chestUI.open { display: block; }
+  #chestUI h3 { margin: 0 0 10px; color: #ffb86b; font-size: 13px; }
+  #chestUI .col { display: grid; grid-template-columns: repeat(4, 44px); gap: 5px; }
+  #chestUI .row { display: flex; gap: 20px; align-items: flex-start; }
+  #chestUI .arrow { color: #666; font-size: 20px; align-self: center; }
+  #chestUI .close {
+    position: absolute; top: 6px; right: 8px; background: none; border: none;
+    color: #888; cursor: pointer; font-size: 18px;
+  }
+  #chestUI .close:hover { color: #fff; }
+  #chestUI .hint { font-size: 10px; color: #888; margin-top: 8px; text-align: center; }
 </style>
 </head>
 <body>
@@ -80,12 +97,28 @@
     <div id="msg"></div>
     <div id="help">
       <b>Sol Tık</b> yürü &nbsp; <b>Sağ Tık</b> saldır/topla/kır<br>
-      <b>1-8</b> seç &nbsp; <b>F</b> et ye (veya seçili ete tekrar tıkla) &nbsp; <b>E</b> pişir<br>
-      🌱 Fidanı sağ tıkla → ekersin &nbsp; ⛏ Kazma → altın
+      <b>1-8</b> seç &nbsp; <b>F</b> ye &nbsp; <b>E</b> pişir &nbsp; <b>Q</b> bırak<br>
+      🌱 sağ tık → ek &nbsp; 📦 sandığa sağ tık → aç &nbsp; ⛏ → altın
     </div>
     <div id="dead">
       <h1>ÖLDÜN</h1>
       <button onclick="location.reload()">YENİDEN BAŞLA</button>
+    </div>
+    <div id="chestUI">
+      <button class="close" onclick="window.__closeChest()">✕</button>
+      <h3>📦 SANDIK</h3>
+      <div class="row">
+        <div>
+          <div style="font-size:10px;color:#888;margin-bottom:4px">SEN</div>
+          <div class="col" id="ch_player"></div>
+        </div>
+        <div class="arrow">↔</div>
+        <div>
+          <div style="font-size:10px;color:#888;margin-bottom:4px">SANDIK</div>
+          <div class="col" id="ch_chest"></div>
+        </div>
+      </div>
+      <div class="hint">Slota tıkla → taşınır. ESC veya ✕ kapat.</div>
     </div>
   </div>
   <aside id="side">
@@ -167,6 +200,7 @@ var ITEMS = {
   pickaxe:     { name:'Kazma',       icon:'⛏' },
   sword:       { name:'Demir Kılıç', icon:'⚔'  },
   sapling:     { name:'Fidan',       icon:'🌱' },
+  chest:       { name:'Sandık',      icon:'📦' },
   table:       { name:'Çal. Masası', icon:'🔨' }
 };
 
@@ -323,7 +357,8 @@ var RECIPES = [
   { id:'axe',     name:'Balta',          cost:{stone:3, wood:1},      needTable:true },
   { id:'knife',   name:'Bıçak',          cost:{stone:2, wood:1},      needTable:true },
   { id:'pickaxe', name:'Kazma',          cost:{iron:2, wood:2},       needTable:true },
-  { id:'sword',   name:'Demir Kılıç',    cost:{iron:3, wood:1},       needTable:true }
+  { id:'sword',   name:'Demir Kılıç',    cost:{iron:3, wood:1},       needTable:true },
+  { id:'chest',   name:'Sandık',         cost:{wood:6, iron:1},       needTable:true, place:true }
 ];
 
 function renderCraft() {
@@ -365,8 +400,10 @@ function craft(r) {
   for (var k in r.cost) if (countItem(k) < r.cost[k]) return;
   for (var k in r.cost) removeItem(k, r.cost[k]);
   if (r.place) {
-    placed.push({ kind:r.id, x:player.x + 35, y:player.y, r:16 });
-    showMsg('🛠️ Çalışma masası kuruldu');
+    var newP = { kind:r.id, x:player.x + 35, y:player.y, r:18 };
+    if (r.id === 'chest') newP.inv = [];
+    placed.push(newP);
+    showMsg('✓ ' + ITEMS[r.id].name + ' yerleştirildi');
   } else {
     addItem(r.id, 1);
     showMsg('✓ ' + ITEMS[r.id].name + ' üretildi');
@@ -392,6 +429,7 @@ cv.addEventListener('mousedown', function(e) {
 });
 
 document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') { closeChest(); return; }
   if (e.key >= '1' && e.key <= '8') {
     player.sel = parseInt(e.key) - 1;
     renderInv();
@@ -399,8 +437,75 @@ document.addEventListener('keydown', function(e) {
     cook();
   } else if (e.key === 'f' || e.key === 'F') {
     eatMeat();
+  } else if (e.key === 'q' || e.key === 'Q') {
+    dropSelected();
   }
 });
+
+function dropSelected() {
+  var it = player.inv[player.sel];
+  if (!it) { showMsg('Seçili eşya yok'); return; }
+  var id = it.id;
+  removeItem(id, 1);
+  drops.push({
+    x: player.x + Math.cos(player.face)*22 + rand(-6,6),
+    y: player.y + Math.sin(player.face)*22 + rand(-6,6),
+    id: id, qty: 1
+  });
+  showMsg('🗑 ' + ITEMS[id].name + ' bırakıldı');
+}
+
+// chest UI
+var openChest = null;
+function openChestUI(c) {
+  openChest = c;
+  document.getElementById('chestUI').classList.add('open');
+  renderChestUI();
+}
+function closeChest() {
+  openChest = null;
+  document.getElementById('chestUI').classList.remove('open');
+}
+window.__closeChest = closeChest;
+
+function renderChestUI() {
+  if (!openChest) return;
+  var pEl = document.getElementById('ch_player');
+  var cEl = document.getElementById('ch_chest');
+  pEl.innerHTML = ''; cEl.innerHTML = '';
+  function makeSlot(inv, idx, isChest) {
+    var d = document.createElement('div');
+    d.className = 'slot';
+    var it = inv[idx];
+    if (it) d.innerHTML = ITEMS[it.id].icon + '<span class="qty">' + it.qty + '</span>';
+    d.style.width = '44px'; d.style.height = '44px';
+    d.onclick = function() {
+      if (!inv[idx]) return;
+      var item = inv[idx];
+      var target = isChest ? player.inv : openChest.inv;
+      // try stack
+      for (var i = 0; i < target.length; i++) {
+        if (target[i].id === item.id) {
+          target[i].qty += item.qty; inv.splice(idx, 1); renderChestUI(); renderInv(); return;
+        }
+      }
+      var cap = isChest ? 8 : 16;
+      if (target.length >= cap) { showMsg('Yer yok'); return; }
+      target.push({ id: item.id, qty: item.qty });
+      inv.splice(idx, 1);
+      renderChestUI(); renderInv();
+    };
+    return d;
+  }
+  for (var i = 0; i < 8; i++) {
+    var d = makeSlot(player.inv, i, false);
+    pEl.appendChild(d);
+  }
+  for (var i = 0; i < 16; i++) {
+    var d = makeSlot(openChest.inv, i, true);
+    cEl.appendChild(d);
+  }
+}
 
 function cook() {
   if (dist(player, campfire) > 80) { showMsg('🔥 Kamp ateşinin yanına gel'); return; }
@@ -429,6 +534,13 @@ function eatMeat(which) {
 
 function interact(wp) {
   if (player.hitCool > 0) return;
+  // chest open
+  for (var i = 0; i < placed.length; i++) {
+    var pp = placed[i];
+    if (pp.kind === 'chest' && dist(pp, wp) < 28 && dist(pp, player) < 70) {
+      openChestUI(pp); return;
+    }
+  }
   // drop pickup if very close to click
   for (var i = drops.length - 1; i >= 0; i--) {
     if (dist(drops[i], wp) < 22 && dist(drops[i], player) < 55) {
@@ -741,7 +853,7 @@ function getSafeGrad() {
   return _safeGrad;
 }
 function draw() {
-  // black bg
+  // outside-world black
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, W, H);
 
@@ -752,16 +864,20 @@ function draw() {
   ctx.textBaseline = 'middle';
   _curFont = '';
 
+  // green ground
+  ctx.fillStyle = '#243d22';
+  ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+
   // grid (in world coords)
   var TILE = 60;
-  ctx.strokeStyle = '#1a1a1a';
+  ctx.strokeStyle = 'rgba(0,0,0,0.18)';
   ctx.lineWidth = 1 / view.scale;
   ctx.beginPath();
   for (var x = 0; x <= WORLD_W; x += TILE) { ctx.moveTo(x, 0); ctx.lineTo(x, WORLD_H); }
   for (var y = 0; y <= WORLD_H; y += TILE) { ctx.moveTo(0, y); ctx.lineTo(WORLD_W, y); }
   ctx.stroke();
   // major grid
-  ctx.strokeStyle = '#2a2a2a';
+  ctx.strokeStyle = 'rgba(0,0,0,0.32)';
   ctx.lineWidth = 1.5 / view.scale;
   ctx.beginPath();
   for (var x = 0; x <= WORLD_W; x += TILE*5) { ctx.moveTo(x, 0); ctx.lineTo(x, WORLD_H); }
@@ -935,12 +1051,40 @@ function draw() {
     if (o.hp < o.hpMax) hpBar(o, 16);
   }
 
-  // placed tables
+  // placed (table / chest)
   for (var i = 0; i < placed.length; i++) {
     var p = placed[i];
-    drawEmoji(p.x, p.y, '🛠️', 36);
-    ctx.fillStyle = '#aaa'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText('MASA', p.x, p.y + 22);
+    if (p.kind === 'chest') {
+      // chest body
+      ctx.fillStyle = '#5a3a18';
+      ctx.fillRect(p.x - 18, p.y - 10, 36, 22);
+      // lid
+      ctx.fillStyle = '#7a4f24';
+      ctx.fillRect(p.x - 18, p.y - 14, 36, 8);
+      // bands
+      ctx.fillStyle = '#a8aab0';
+      ctx.fillRect(p.x - 18, p.y - 7, 36, 2);
+      ctx.fillRect(p.x - 18, p.y + 4, 36, 2);
+      // lock
+      ctx.fillStyle = '#ffd060';
+      ctx.fillRect(p.x - 3, p.y - 5, 6, 5);
+      setFont(10); ctx.fillStyle = '#ffb86b';
+      ctx.fillText('SANDIK', p.x, p.y + 22);
+    } else {
+      // table
+      ctx.fillStyle = '#6a4520';
+      ctx.fillRect(p.x - 18, p.y - 12, 36, 8);
+      ctx.fillStyle = '#4a2f18';
+      ctx.fillRect(p.x - 16, p.y - 4, 4, 14);
+      ctx.fillRect(p.x + 12, p.y - 4, 4, 14);
+      // tools on top
+      ctx.fillStyle = '#aaa';
+      ctx.fillRect(p.x - 8, p.y - 14, 4, 4);
+      ctx.fillStyle = '#8a5a20';
+      ctx.fillRect(p.x + 4, p.y - 14, 4, 4);
+      setFont(10); ctx.fillStyle = '#aaa';
+      ctx.fillText('MASA', p.x, p.y + 22);
+    }
   }
 
   // trees
