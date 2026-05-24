@@ -104,6 +104,11 @@
   }
   @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
   @keyframes sway { 0%,100%{transform:rotate(-1.5deg)} 50%{transform:rotate(1.5deg)} }
+  /* tree / stack / item animations preserve their static Y-offset so the
+     base of the emoji stays at the ground while it sways or floats */
+  @keyframes sway-tree  { 0%,100%{transform:translateY(18%) rotate(-1.5deg)} 50%{transform:translateY(18%) rotate(1.5deg)} }
+  @keyframes sway-stack { 0%,100%{transform:translateY(12%) rotate(-1.5deg)} 50%{transform:translateY(12%) rotate(1.5deg)} }
+  @keyframes bob-item   { 0%,100%{transform:translateY(10%)} 50%{transform:translateY(calc(10% - 8px))} }
   #scenery {
     position: absolute; inset: 0; pointer-events: none;
     overflow: hidden;
@@ -115,23 +120,28 @@
     background: linear-gradient(180deg, rgba(15,30,10,0.5), #051005 80%);
     z-index: 1;
   }
-  #scenery .tree, #scenery .item, #scenery .stack {
+  #scenery .tree {
     position: absolute; bottom: var(--b, 0);
     transform-origin: center bottom;
-    animation: sway 5s ease-in-out infinite;
     line-height: 0.72;
-    /* emojis sit high in their line-box — push down so visual base touches ground */
-    transform: translateY(18%);
+    animation: sway-tree 5s ease-in-out infinite;
   }
-  #scenery .item { animation: float 4s ease-in-out infinite; transform: translateY(10%); }
   #scenery .stack {
+    position: absolute; bottom: var(--b, 0);
+    transform-origin: center bottom;
     line-height: 0.74; text-align: center;
     display: flex; flex-direction: column;
-    transform: translateY(12%);
+    animation: sway-stack 5s ease-in-out infinite;
   }
   #scenery .stack span { display: block; }
+  #scenery .item {
+    position: absolute; bottom: var(--b, 0);
+    transform-origin: center bottom;
+    line-height: 0.8;
+    animation: bob-item 4s ease-in-out infinite;
+  }
   /* flying creatures actually fly — keep them up */
-  #scenery .fly { position: absolute; animation: float 4s ease-in-out infinite; transform: none; }
+  #scenery .fly { position: absolute; animation: float 4s ease-in-out infinite; }
   #scenery .glow {
     position: absolute; bottom: 12%; left: 50%; transform: translateX(-50%);
     width: 320px; height: 160px;
