@@ -108,12 +108,18 @@
     position: absolute; inset: 0; pointer-events: none;
     background: linear-gradient(180deg, transparent 0%, transparent 40%, rgba(20,40,18,0.45) 75%, rgba(10,20,8,0.9) 100%);
   }
-  #scenery .tree, #scenery .item {
-    position: absolute; bottom: var(--b, 10%);
+  #scenery .tree, #scenery .item, #scenery .stack {
+    position: absolute; bottom: var(--b, 0);
     transform-origin: center bottom;
     animation: sway 5s ease-in-out infinite;
   }
   #scenery .item { animation: float 4s ease-in-out infinite; }
+  #scenery .stack {
+    line-height: 0.78; text-align: center;
+    display: flex; flex-direction: column;
+  }
+  #scenery .stack span { display: block; }
+  #scenery .fly { position: absolute; animation: float 4s ease-in-out infinite; }
   #scenery .glow {
     position: absolute; bottom: 12%; left: 50%; transform: translateX(-50%);
     width: 320px; height: 160px;
@@ -203,68 +209,63 @@
 <body>
 <div id="gameover">
   <div class="skull">💀</div>
-  <h1>OYUN BİTTİ</h1>
-  <div class="sub">HARDCORE</div>
-  <div class="info" id="goInfo">Gün 1'de öldün</div>
-  <button onclick="window.__goBack()">ANA MENÜ</button>
-</div>
-<div id="start">
   <div id="scenery">
     <div class="glow"></div>
-    <!-- TOP ROW (0-15% from top, very top of screen) -->
-    <div class="item" style="left:6%;top:4%;font-size:80px;opacity:.6">🦅</div>
-    <div class="tree" style="left:18%;top:2%;font-size:120px;opacity:.45">🌲</div>
-    <div class="tree" style="left:32%;top:6%;font-size:100px;opacity:.5">🌳</div>
-    <div class="item" style="left:42%;top:3%;font-size:60px;opacity:.7">🦇</div>
-    <div class="tree" style="left:60%;top:5%;font-size:110px;opacity:.45">🌲</div>
-    <div class="tree" style="left:74%;top:1%;font-size:130px;opacity:.5">🌳</div>
-    <div class="item" style="left:86%;top:8%;font-size:70px;opacity:.65">🐦</div>
 
-    <!-- UPPER MID (15-35%) -->
-    <div class="tree" style="left:2%;top:18%;font-size:140px;opacity:.55">🌳</div>
-    <div class="tree" style="left:14%;top:22%;font-size:160px;opacity:.55">🌲</div>
-    <div class="tree" style="left:26%;top:16%;font-size:130px;opacity:.5">🌳</div>
-    <div class="item" style="left:38%;top:25%;font-size:55px;opacity:.7">🦋</div>
-    <div class="tree" style="left:48%;top:20%;font-size:150px;opacity:.55">🌲</div>
-    <div class="tree" style="left:62%;top:24%;font-size:135px;opacity:.5">🌳</div>
-    <div class="tree" style="left:78%;top:18%;font-size:155px;opacity:.55">🌲</div>
-    <div class="tree" style="left:92%;top:21%;font-size:120px;opacity:.5">🌳</div>
+    <!-- SKY: flying creatures only (these can float) -->
+    <div class="fly" style="left:8%;top:5%;font-size:70px;opacity:.7">🦅</div>
+    <div class="fly" style="left:38%;top:3%;font-size:55px;opacity:.7;animation-delay:-2s">🦇</div>
+    <div class="fly" style="left:60%;top:7%;font-size:65px;opacity:.7;animation-delay:-1s">🐦</div>
+    <div class="fly" style="left:82%;top:4%;font-size:60px;opacity:.7;animation-delay:-3s">🦋</div>
 
-    <!-- MIDDLE (35-55%) -->
-    <div class="tree" style="left:5%;top:42%;font-size:180px;opacity:.7">🌲</div>
-    <div class="tree" style="left:20%;top:46%;font-size:170px;opacity:.75">🌳</div>
-    <div class="item" style="left:30%;top:50%;font-size:65px;opacity:.85">🐦</div>
-    <div class="tree" style="left:36%;top:40%;font-size:190px;opacity:.7">🌲</div>
-    <div class="tree" style="left:52%;top:44%;font-size:175px;opacity:.75">🌳</div>
-    <div class="item" style="left:64%;top:52%;font-size:60px;opacity:.85">🦋</div>
-    <div class="tree" style="left:70%;top:42%;font-size:185px;opacity:.7">🌲</div>
-    <div class="tree" style="left:84%;top:46%;font-size:170px;opacity:.75">🌳</div>
+    <!-- TALL TOWERS: stacked emojis from ground reaching toward top -->
+    <div class="stack" style="left:0%;font-size:130px;opacity:.6;animation-delay:-2s">
+      <span>🌲</span><span>🌲</span><span>🌲</span><span>🌲</span><span>🌲</span>
+    </div>
+    <div class="stack" style="left:10%;font-size:115px;opacity:.55;animation-delay:-1s">
+      <span>🌳</span><span>🌳</span><span>🌳</span><span>🌳</span><span>🌳</span><span>🌳</span>
+    </div>
+    <div class="stack" style="left:21%;font-size:155px;opacity:.7;animation-delay:-3s">
+      <span>🌲</span><span>🌲</span><span>🌲</span><span>🌲</span><span>🌲</span>
+    </div>
+    <div class="stack" style="left:32%;font-size:125px;opacity:.6;animation-delay:-2.4s">
+      <span>🌳</span><span>🌳</span><span>🌳</span><span>🌳</span><span>🌳</span>
+    </div>
+    <div class="stack" style="left:42%;font-size:145px;opacity:.65;animation-delay:-0.6s">
+      <span>🌲</span><span>🌲</span><span>🌲</span><span>🌲</span><span>🌲</span>
+    </div>
+    <div class="stack" style="left:56%;font-size:130px;opacity:.6;animation-delay:-1.7s">
+      <span>🌳</span><span>🌳</span><span>🌳</span><span>🌳</span><span>🌳</span>
+    </div>
+    <div class="stack" style="left:66%;font-size:150px;opacity:.7;animation-delay:-3.2s">
+      <span>🌲</span><span>🌲</span><span>🌲</span><span>🌲</span><span>🌲</span>
+    </div>
+    <div class="stack" style="left:77%;font-size:120px;opacity:.55;animation-delay:-0.9s">
+      <span>🌳</span><span>🌳</span><span>🌳</span><span>🌳</span><span>🌳</span><span>🌳</span>
+    </div>
+    <div class="stack" style="left:88%;font-size:140px;opacity:.65;animation-delay:-2.6s">
+      <span>🌲</span><span>🌲</span><span>🌲</span><span>🌲</span><span>🌲</span>
+    </div>
 
-    <!-- LOWER MID (55-75%) -->
-    <div class="tree" style="left:0%;top:60%;font-size:200px;opacity:.85">🌳</div>
-    <div class="tree" style="left:12%;top:64%;font-size:210px;opacity:.85">🌲</div>
-    <div class="tree" style="left:28%;top:58%;font-size:220px;opacity:.85">🌳</div>
-    <div class="item" style="left:40%;top:68%;font-size:75px;opacity:.9">🪨</div>
-    <div class="tree" style="left:46%;top:62%;font-size:215px;opacity:.85">🌲</div>
-    <div class="tree" style="left:62%;top:60%;font-size:225px;opacity:.85">🌳</div>
-    <div class="item" style="left:73%;top:70%;font-size:70px;opacity:.9">🐰</div>
-    <div class="tree" style="left:80%;top:64%;font-size:210px;opacity:.85">🌲</div>
-    <div class="tree" style="left:94%;top:58%;font-size:200px;opacity:.85">🌳</div>
+    <!-- PALMS anchored to ground -->
+    <div class="tree" style="left:6%;font-size:200px;animation-delay:-1.5s">🌴</div>
+    <div class="tree" style="left:38%;font-size:230px;animation-delay:-2.5s">🌴</div>
+    <div class="tree" style="left:72%;font-size:210px;animation-delay:-0.5s">🌴</div>
 
-    <!-- BOTTOM ROW (75-100%, biggest foreground) -->
-    <div class="tree" style="left:0%;font-size:240px;--b:0%;animation-delay:-1s">🌲</div>
-    <div class="tree" style="left:11%;font-size:190px;--b:2%;animation-delay:-2s">🌳</div>
-    <div class="tree" style="left:23%;font-size:280px;--b:0%;animation-delay:-3s">🌲</div>
-    <div class="tree" style="left:35%;font-size:170px;--b:5%;animation-delay:-1.5s">🌳</div>
-    <div class="item" style="left:40%;font-size:90px;--b:3%">🪨</div>
-    <div class="tree" style="left:44%;font-size:210px;--b:2%;animation-delay:-0.5s">🌲</div>
-    <div class="item" style="left:49%;font-size:150px;--b:0%;animation:float 2s ease-in-out infinite">🔥</div>
-    <div class="item" style="left:54%;font-size:70px;--b:8%;animation-delay:-0.5s">🐰</div>
-    <div class="tree" style="left:57%;font-size:220px;--b:3%;animation-delay:-2.5s">🌳</div>
-    <div class="tree" style="left:68%;font-size:260px;--b:0%;animation-delay:-1.8s">🌲</div>
-    <div class="tree" style="left:79%;font-size:195px;--b:4%;animation-delay:-3.5s">🌳</div>
-    <div class="item" style="left:85%;font-size:100px;--b:2%;animation-delay:-2s">🦌</div>
-    <div class="tree" style="left:90%;font-size:235px;--b:0%;animation-delay:-0.8s">🌲</div>
+    <!-- FOREGROUND BIG TREES anchored to ground -->
+    <div class="tree" style="left:2%;font-size:260px;animation-delay:-1s">🌲</div>
+    <div class="tree" style="left:14%;font-size:210px;animation-delay:-2s">🌳</div>
+    <div class="tree" style="left:24%;font-size:300px;animation-delay:-3s">🌲</div>
+    <div class="tree" style="left:36%;font-size:200px;animation-delay:-1.5s">🌳</div>
+    <div class="item" style="left:42%;font-size:90px">🪨</div>
+    <div class="tree" style="left:46%;font-size:230px;animation-delay:-0.5s">🌲</div>
+    <div class="item" style="left:49%;font-size:160px;animation:float 2s ease-in-out infinite">🔥</div>
+    <div class="item" style="left:55%;font-size:70px;--b:6%;animation-delay:-0.5s">🐰</div>
+    <div class="tree" style="left:58%;font-size:240px;animation-delay:-2.5s">🌳</div>
+    <div class="tree" style="left:69%;font-size:280px;animation-delay:-1.8s">🌲</div>
+    <div class="tree" style="left:80%;font-size:215px;animation-delay:-3.5s">🌳</div>
+    <div class="item" style="left:85%;font-size:100px;animation-delay:-2s">🦌</div>
+    <div class="tree" style="left:92%;font-size:255px;animation-delay:-0.8s">🌲</div>
   </div>
   <h1>IN THE WOODS</h1>
   <div class="sub">A SURVIVAL GAME · BY MIRROW</div>
