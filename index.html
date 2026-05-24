@@ -99,6 +99,25 @@
   #start .back { background: transparent; border: 1px solid #444; color: #aaa; padding: 6px 18px; font-size: 12px; min-width: 0; }
   #start .credit-text { color: #ccc; font-size: 14px; line-height: 1.8; text-align: center; }
   #start .credit-text b { color: #ffb86b; font-size: 22px; letter-spacing: 4px; }
+  #gameover {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.92);
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    z-index: 200; gap: 20px;
+  }
+  #gameover.show { display: flex; }
+  #gameover .skull { font-size: 92px; }
+  #gameover h1 {
+    color: #e15a5a; font-size: 56px; letter-spacing: 8px;
+    text-shadow: 0 0 18px rgba(225,90,90,.5);
+  }
+  #gameover .sub { color: #888; letter-spacing: 3px; font-size: 12px; }
+  #gameover .info { color: #aaa; font-size: 14px; margin-top: 4px; }
+  #gameover button {
+    background: #e15a5a; color: #1a0a0a; border: none; padding: 12px 36px;
+    font-size: 14px; font-weight: 700; letter-spacing: 2px; border-radius: 6px;
+    cursor: pointer; margin-top: 12px;
+  }
+  #gameover button:hover { background: #ff7a7a; }
   /* fishing minigame */
   #fishUI {
     position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -137,6 +156,13 @@
 </style>
 </head>
 <body>
+<div id="gameover">
+  <div class="skull">💀</div>
+  <h1>OYUN BİTTİ</h1>
+  <div class="sub">HARDCORE</div>
+  <div class="info" id="goInfo">Gün 1'de öldün</div>
+  <button onclick="window.__goBack()">ANA MENÜ</button>
+</div>
 <div id="start">
   <h1>IN THE WOODS</h1>
   <div class="sub">A SURVIVAL GAME</div>
@@ -283,6 +309,8 @@ var ITEMS = {
   pickaxe:     { name:'Kazma',       icon:'⛏' },
   sword:       { name:'Demir Kılıç', icon:'⚔'  },
   spear:       { name:'Mızrak',      icon:'🔱' },
+  bow:         { name:'Yay',         icon:'🏹' },
+  arrow:       { name:'Ok',          icon:'➹'  },
   shears:      { name:'Makas',       icon:'✂'  },
   rod:         { name:'Olta',        icon:'🎣' },
   sapling:     { name:'Fidan',       icon:'🌱' },
@@ -487,6 +515,8 @@ var RECIPES = [
   { id:'axe',     name:'Balta',          cost:{stone:3, wood:1},              needTable:true },
   { id:'knife',   name:'Bıçak',          cost:{stone:2, wood:1},              needTable:true },
   { id:'spear',   name:'Mızrak',         cost:{stone:2, wood:3},              needTable:true },
+  { id:'bow',     name:'Yay',            cost:{wood:3, feather:1},            needTable:true },
+  { id:'arrow',   name:'Ok x3',          cost:{wood:1, stone:1, feather:1},   needTable:true, qty:3 },
   { id:'rod',     name:'Olta',           cost:{wood:3, sapling:1},            needTable:true },
   { id:'pickaxe', name:'Kazma',          cost:{iron:2, wood:2},               needTable:true },
   { id:'sword',   name:'Demir Kılıç',    cost:{iron:3, wood:1},               needTable:true },
@@ -539,8 +569,9 @@ function craft(r) {
     placed.push(newP);
     showMsg('✓ ' + ITEMS[r.id].name + ' yerleştirildi');
   } else {
-    addItem(r.id, 1);
-    showMsg('✓ ' + ITEMS[r.id].name + ' üretildi');
+    var q = r.qty || 1;
+    addItem(r.id, q);
+    showMsg('✓ ' + (q > 1 ? q + 'x ' : '') + ITEMS[r.id].name + ' üretildi');
   }
   renderInv();
 }
@@ -679,15 +710,28 @@ function interact(wp) {
     }
   }
   var tool0 = getTool();
-  // spear throw — ranged
+  // spear throw — ranged, heavy
   if (tool0 === 'spear') {
     var ang = Math.atan2(wp.y - player.y, wp.x - player.x);
     projectiles.push({
       x: player.x + Math.cos(ang)*16, y: player.y + Math.sin(ang)*16,
       vx: Math.cos(ang)*420, vy: Math.sin(ang)*420,
-      life: 0.9, dmg: 3
+      life: 0.9, dmg: 3, kind:'spear'
     });
     player.face = ang; player.hitCool = 0.4;
+    return;
+  }
+  // bow shoot — needs arrow
+  if (tool0 === 'bow') {
+    if (countItem('arrow') < 1) { showMsg('🏹 Ok yok'); return; }
+    removeItem('arrow', 1);
+    var ang = Math.atan2(wp.y - player.y, wp.x - player.x);
+    projectiles.push({
+      x: player.x + Math.cos(ang)*16, y: player.y + Math.sin(ang)*16,
+      vx: Math.cos(ang)*640, vy: Math.sin(ang)*640,
+      life: 1.4, dmg: 2, kind:'arrow'
+    });
+    player.face = ang; player.hitCool = 0.18;
     return;
   }
   // fishing rod — click lake
@@ -1050,8 +1094,9 @@ function update(dt) {
             } else if (type === 'zombie') drops.push({x:arr[k].x,y:arr[k].y,id:'meat_raw',qty:1});
             arr.splice(k, 1);
           }
-          // chance to drop spear back
-          if (Math.random() < 0.6) drops.push({x:pj.x,y:pj.y,id:'spear',qty:1});
+          // chance to drop ammo back
+          if (pj.kind === 'spear' && Math.random() < 0.6) drops.push({x:pj.x,y:pj.y,id:'spear',qty:1});
+          else if (pj.kind === 'arrow' && Math.random() < 0.35) drops.push({x:pj.x,y:pj.y,id:'arrow',qty:1});
           projectiles.splice(i, 1);
           return true;
         }
@@ -1140,22 +1185,10 @@ function trySleep(bed) {
 function respawn() {
   livesLeft--;
   if (livesLeft <= 0 && diff.lives === 1) {
-    // hardcore game over
+    // hardcore game over screen
     gameStarted = false;
-    document.getElementById('start').classList.remove('hide');
-    document.getElementById('mainMenu').style.display = 'flex';
-    document.getElementById('diffPanel').classList.remove('show');
-    document.getElementById('creditPanel').classList.remove('show');
-    // wipe state — fresh on next start
-    trees.length = stones.length = rabbits.length = wolves.length = bears.length = 0;
-    zombies.length = chickens.length = sheeps.length = ironOres.length = goldOres.length = 0;
-    buildings.length = drops.length = placed.length = dens.length = lakes.length = projectiles.length = 0;
-    fog = new Uint8Array(FOG_W * FOG_H);
-    player.inv = [{ id: 'stone', qty: 1 }];
-    player.hp = player.hpMax; player.hu = 100; player.en = 100;
-    player.x = WORLD_W/2 + 60; player.y = WORLD_H/2 + 60;
-    player.tx = player.x; player.ty = player.y;
-    day = 1; dayT = 0;
+    document.getElementById('goInfo').textContent = 'Gün ' + day + '\'de öldün';
+    document.getElementById('gameover').classList.add('show');
     return;
   }
   // drop all inventory at death location
@@ -1448,10 +1481,23 @@ function draw() {
     var ang = Math.atan2(pj.vy, pj.vx);
     ctx.save();
     ctx.translate(pj.x, pj.y); ctx.rotate(ang);
-    ctx.fillStyle = '#aaa';
-    ctx.fillRect(-10, -1, 20, 2);
-    ctx.fillStyle = '#5a3a18';
-    ctx.fillRect(-14, -2, 8, 4);
+    if (pj.kind === 'arrow') {
+      ctx.fillStyle = '#c0c0c0';
+      ctx.fillRect(-8, -0.5, 14, 1.5);
+      // arrowhead
+      ctx.fillStyle = '#888';
+      ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(4, -3); ctx.lineTo(4, 3); ctx.closePath(); ctx.fill();
+      // fletching
+      ctx.fillStyle = '#e0e0e0';
+      ctx.fillRect(-8, -2, 3, 4);
+    } else {
+      ctx.fillStyle = '#aaa';
+      ctx.fillRect(-10, -1, 20, 2);
+      ctx.fillStyle = '#5a3a18';
+      ctx.fillRect(-14, -2, 8, 4);
+      ctx.fillStyle = '#888';
+      ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(6, -3); ctx.lineTo(6, 3); ctx.closePath(); ctx.fill();
+    }
     ctx.restore();
   }
 
@@ -1642,9 +1688,9 @@ function stopFishing(won) {
 function updateFishing(dt) {
   if (!fishing) return;
   var BAR = 280, ZONE_BOTTOM_PAD = 0;
-  // mark physics
-  fishing.vel += (fishing.holding ? -360 : 320) * dt;
-  fishing.vel *= 0.94;
+  // mark physics — snappier
+  fishing.vel += (fishing.holding ? -900 : 700) * dt;
+  fishing.vel *= 0.88;
   fishing.markY += fishing.vel * dt;
   if (fishing.markY < 0) { fishing.markY = 0; fishing.vel = 0; }
   if (fishing.markY > BAR - 4) { fishing.markY = BAR - 4; fishing.vel = 0; }
@@ -1680,6 +1726,24 @@ update = function(dt) { _origUpdate(dt); if (fishing) updateFishing(dt); };
 
 // ---------- Start screen / game start ----------
 var gameStarted = false;
+window.__goBack = function() {
+  document.getElementById('gameover').classList.remove('show');
+  // wipe state — fresh on next start
+  trees.length = stones.length = rabbits.length = wolves.length = bears.length = 0;
+  zombies.length = chickens.length = sheeps.length = ironOres.length = goldOres.length = 0;
+  buildings.length = drops.length = placed.length = dens.length = lakes.length = projectiles.length = 0;
+  fog = new Uint8Array(FOG_W * FOG_H);
+  player.inv = [{ id: 'stone', qty: 1 }];
+  player.hp = player.hpMax; player.hu = 100; player.en = 100;
+  player.x = WORLD_W/2 + 60; player.y = WORLD_H/2 + 60;
+  player.tx = player.x; player.ty = player.y;
+  player.sel = 0; renderInv();
+  day = 1; dayT = 0;
+  document.getElementById('start').classList.remove('hide');
+  document.getElementById('mainMenu').style.display = 'flex';
+  document.getElementById('diffPanel').classList.remove('show');
+  document.getElementById('creditPanel').classList.remove('show');
+};
 window.__menu = function(name) {
   document.getElementById('mainMenu').style.display = (name === 'main') ? 'flex' : 'none';
   document.getElementById('diffPanel').classList.toggle('show', name === 'play');
