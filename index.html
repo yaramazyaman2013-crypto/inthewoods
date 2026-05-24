@@ -106,7 +106,7 @@
   @keyframes sway { 0%,100%{transform:rotate(-1.5deg)} 50%{transform:rotate(1.5deg)} }
   #scenery {
     position: absolute; bottom: 0; left: 0; right: 0;
-    height: 50%; pointer-events: none;
+    height: 65%; pointer-events: none;
     background: linear-gradient(180deg, transparent 0%, rgba(20,40,18,0.4) 60%, rgba(10,20,8,0.95) 100%);
   }
   #scenery .tree, #scenery .item {
@@ -212,20 +212,20 @@
 <div id="start">
   <div id="scenery">
     <div class="glow"></div>
-    <div class="tree" style="left:4%;font-size:120px;--b:5%;animation-delay:-1s">🌲</div>
-    <div class="tree" style="left:13%;font-size:90px;--b:8%;animation-delay:-2s">🌳</div>
-    <div class="tree" style="left:22%;font-size:140px;--b:3%;animation-delay:-3s">🌲</div>
-    <div class="tree" style="left:32%;font-size:80px;--b:12%;animation-delay:-1.5s">🌳</div>
-    <div class="item" style="left:39%;font-size:48px;--b:7%">🪨</div>
-    <div class="tree" style="left:46%;font-size:100px;--b:6%;animation-delay:-0.5s">🌲</div>
-    <div class="item" style="left:49%;font-size:70px;--b:3%;animation:float 2s ease-in-out infinite">🔥</div>
-    <div class="tree" style="left:55%;font-size:110px;--b:9%;animation-delay:-2.5s">🌳</div>
-    <div class="item" style="left:62%;font-size:40px;--b:14%;animation-delay:-1s">🐰</div>
-    <div class="tree" style="left:67%;font-size:130px;--b:4%;animation-delay:-1.8s">🌲</div>
-    <div class="tree" style="left:76%;font-size:95px;--b:10%;animation-delay:-3.5s">🌳</div>
-    <div class="item" style="left:82%;font-size:50px;--b:6%;animation-delay:-2s">🦌</div>
-    <div class="tree" style="left:88%;font-size:115px;--b:5%;animation-delay:-0.8s">🌲</div>
-    <div class="tree" style="left:95%;font-size:85px;--b:11%;animation-delay:-2.2s">🌳</div>
+    <div class="tree" style="left:2%;font-size:220px;--b:3%;animation-delay:-1s">🌲</div>
+    <div class="tree" style="left:13%;font-size:170px;--b:6%;animation-delay:-2s">🌳</div>
+    <div class="tree" style="left:24%;font-size:260px;--b:2%;animation-delay:-3s">🌲</div>
+    <div class="tree" style="left:34%;font-size:150px;--b:10%;animation-delay:-1.5s">🌳</div>
+    <div class="item" style="left:39%;font-size:80px;--b:6%">🪨</div>
+    <div class="tree" style="left:44%;font-size:190px;--b:5%;animation-delay:-0.5s">🌲</div>
+    <div class="item" style="left:49%;font-size:130px;--b:2%;animation:float 2s ease-in-out infinite">🔥</div>
+    <div class="tree" style="left:54%;font-size:200px;--b:7%;animation-delay:-2.5s">🌳</div>
+    <div class="item" style="left:63%;font-size:75px;--b:13%;animation-delay:-1s">🐰</div>
+    <div class="tree" style="left:67%;font-size:240px;--b:3%;animation-delay:-1.8s">🌲</div>
+    <div class="tree" style="left:78%;font-size:175px;--b:8%;animation-delay:-3.5s">🌳</div>
+    <div class="item" style="left:83%;font-size:95px;--b:5%;animation-delay:-2s">🦌</div>
+    <div class="tree" style="left:88%;font-size:215px;--b:4%;animation-delay:-0.8s">🌲</div>
+    <div class="tree" style="left:96%;font-size:160px;--b:9%;animation-delay:-2.2s">🌳</div>
   </div>
   <h1>IN THE WOODS</h1>
   <div class="sub">A SURVIVAL GAME · BY MIRROW</div>
@@ -563,7 +563,7 @@ function renderInv() {
         var was = player.sel;
         if (was === idx && player.inv[idx]) {
           var id = player.inv[idx].id;
-          if (id === 'meat_cooked' || id === 'meat_raw') { eatMeat(id); return; }
+          if (FOOD[id]) { eatItem(id); return; }
         }
         player.sel = idx; renderInv();
       };
@@ -737,27 +737,38 @@ function renderChestUI() {
 
 function cook() {
   if (dist(player, campfire) > 80) { showMsg('🔥 Kamp ateşinin yanına gel'); return; }
-  if (countItem('meat_raw') < 1) { showMsg('Çiğ et yok'); return; }
-  var n = countItem('meat_raw');
-  removeItem('meat_raw', n); addItem('meat_cooked', n);
+  var nm = countItem('meat_raw'), nf = countItem('fish_raw');
+  if (nm + nf < 1) { showMsg('Çiğ et/balık yok'); return; }
+  if (nm > 0) { removeItem('meat_raw', nm); addItem('meat_cooked', nm); }
+  if (nf > 0) { removeItem('fish_raw', nf); addItem('fish_cooked', nf); }
   burst(campfire.x, campfire.y-6, '#ffb86b', 12);
-  showMsg('🍖 ' + n + ' et pişti');
+  var msg = [];
+  if (nm > 0) msg.push('🍖 ' + nm + ' et');
+  if (nf > 0) msg.push('🍣 ' + nf + ' balık');
+  showMsg(msg.join(', ') + ' pişti');
+}
+var FOOD = {
+  meat_cooked: { hu: 35, hp: 10, msg: '🍖 Doydun (+35, +10)' },
+  fish_cooked: { hu: 28, hp: 8,  msg: '🍣 Doydun (+28, +8)'  },
+  meat_raw:    { hu: 15, hp: -5, msg: '🥩 Çiğ yedin (+15, -5)' },
+  fish_raw:    { hu: 12, hp: -3, msg: '🐟 Çiğ balık (+12, -3)' }
+};
+function eatItem(id) {
+  if (!FOOD[id] || countItem(id) < 1) return false;
+  removeItem(id, 1);
+  player.hu = clamp(player.hu + FOOD[id].hu, 0, 100);
+  player.hp = clamp(player.hp + FOOD[id].hp, 0, player.hpMax);
+  showMsg(FOOD[id].msg);
+  return true;
 }
 function eatMeat(which) {
-  if (which === 'meat_raw' || (!which && countItem('meat_cooked') === 0 && countItem('meat_raw') > 0)) {
-    if (countItem('meat_raw') < 1) { showMsg('Et yok'); return; }
-    removeItem('meat_raw', 1);
-    player.hu = clamp(player.hu + 15, 0, 100);
-    player.hp = clamp(player.hp - 5, 0, player.hpMax);
-    showMsg('🥩 Çiğ yedin (+15 açlık, -5 can)');
-    return;
-  }
-  if (countItem('meat_cooked') > 0) {
-    removeItem('meat_cooked', 1);
-    player.hu = clamp(player.hu + 35, 0, 100);
-    player.hp = clamp(player.hp + 10, 0, player.hpMax);
-    showMsg('🍖 Doydun (+35 açlık, +10 can)');
-  } else { showMsg('Pişmiş et yok'); }
+  if (which && eatItem(which)) return;
+  // priority: cooked food first
+  if (eatItem('meat_cooked')) return;
+  if (eatItem('fish_cooked')) return;
+  if (eatItem('meat_raw')) return;
+  if (eatItem('fish_raw')) return;
+  showMsg('Yemek yok');
 }
 
 function interact(wp) {
@@ -1208,15 +1219,19 @@ function update(dt) {
   var isDay = phase < 0.7;
   dayEl.innerHTML = (isDay ? '☀️' : '🌙') + ' Gün ' + day;
 
-  // auto-cook when standing on campfire
+  // auto-cook when standing on campfire (et + balık)
   if (dist(player, campfire) < 45) {
     cookT += dt;
-    if (cookT >= 1.5 && countItem('meat_raw') > 0) {
-      cookT = 0;
-      removeItem('meat_raw', 1);
-      addItem('meat_cooked', 1);
-      burst(campfire.x, campfire.y - 6, '#ffb86b', 6);
-      showMsg('🍖 Et pişti (otomatik)');
+    if (cookT >= 1.5) {
+      if (countItem('meat_raw') > 0) {
+        cookT = 0; removeItem('meat_raw', 1); addItem('meat_cooked', 1);
+        burst(campfire.x, campfire.y - 6, '#ffb86b', 6);
+        showMsg('🍖 Et pişti');
+      } else if (countItem('fish_raw') > 0) {
+        cookT = 0; removeItem('fish_raw', 1); addItem('fish_cooked', 1);
+        burst(campfire.x, campfire.y - 6, '#ffd060', 6);
+        showMsg('🍣 Balık pişti');
+      }
     }
   } else { cookT = 0; }
 
