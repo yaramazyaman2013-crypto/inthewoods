@@ -176,20 +176,20 @@ var campfire = { x: WORLD_W/2, y: WORLD_H/2, r: 18, light: 170 };
 var trees = [], stones = [], rabbits = [], wolves = [], bears = [];
 var buildings = [], drops = [], placed = [], dens = [], particles = [], lakes = [];
 
-function spawnRabbit(x,y){ return { kind:'rabbit', x:x, y:y, r:8, hp:2, hpMax:2, speed:110, tx:x, ty:y, wT:0, fT:0 }; }
-function spawnWolf(x,y){ return { kind:'wolf', x:x, y:y, r:12, hp:6, hpMax:6, dmg:8, speed:90, tx:x, ty:y, wT:0, aT:0 }; }
-function spawnBear(x,y){ return { kind:'bear', x:x, y:y, r:18, hp:14, hpMax:14, dmg:16, speed:65, tx:x, ty:y, wT:0, aT:0 }; }
+function spawnRabbit(x,y){ return { kind:'rabbit', x:x, y:y, r:8, hp:2, hpMax:2, speed:140, tx:x, ty:y, wT:0, fT:0 }; }
+function spawnWolf(x,y){ return { kind:'wolf', x:x, y:y, r:12, hp:6, hpMax:6, dmg:8, speed:110, tx:x, ty:y, wT:0, aT:0 }; }
+function spawnBear(x,y){ return { kind:'bear', x:x, y:y, r:18, hp:14, hpMax:14, dmg:16, speed:80, tx:x, ty:y, wT:0, aT:0 }; }
 
 function buildWorld() {
   // trees
-  for (var i = 0; i < 80; i++) {
+  for (var i = 0; i < 50; i++) {
     var p, t = 0;
     do { p = { x: rand(40, WORLD_W-40), y: rand(40, WORLD_H-40) }; t++; }
     while (dist(p, campfire) < 130 && t < 20);
     trees.push({ x:p.x, y:p.y, hp:3, hpMax:3, r:18, sway:Math.random()*6 });
   }
   // stones
-  for (var i = 0; i < 50; i++) {
+  for (var i = 0; i < 30; i++) {
     var p, t = 0;
     do { p = { x: rand(40, WORLD_W-40), y: rand(40, WORLD_H-40) }; t++; }
     while (dist(p, campfire) < 110 && t < 20);
@@ -450,8 +450,10 @@ function interact(wp) {
 }
 
 function burst(x, y, color, n) {
-  for (var i = 0; i < n; i++) {
-    particles.push({ x:x, y:y, vx:rand(-50,50), vy:rand(-70,-10), life:.6, max:.6, c:color });
+  if (particles.length > 60) return;
+  var k = Math.min(n, 5);
+  for (var i = 0; i < k; i++) {
+    particles.push({ x:x, y:y, vx:rand(-50,50), vy:rand(-70,-10), life:.5, max:.5, c:color });
   }
 }
 
@@ -465,10 +467,15 @@ function aiRabbit(r, dt) {
   if (r.fT > 0) {
     r.fT -= dt;
     var dx = r.x - player.x, dy = r.y - player.y, d = Math.sqrt(dx*dx+dy*dy)||1;
-    r.x += dx/d * r.speed * 1.5 * dt; r.y += dy/d * r.speed * 1.5 * dt;
+    r.x += dx/d * r.speed * 1.6 * dt; r.y += dy/d * r.speed * 1.6 * dt;
   } else {
     r.wT -= dt;
-    if (r.wT <= 0) { r.wT = rand(2,5); r.tx = r.x + rand(-80,80); r.ty = r.y + rand(-80,80); }
+    var rdx = r.tx - r.x, rdy = r.ty - r.y;
+    if (r.wT <= 0 || (rdx*rdx + rdy*rdy) < 100) {
+      r.wT = rand(0.4, 1.5);
+      r.tx = clamp(r.x + rand(-160, 160), 20, WORLD_W-20);
+      r.ty = clamp(r.y + rand(-160, 160), 20, WORLD_H-20);
+    }
     moveTo(r, r.tx, r.ty, dt);
   }
   r.x = clamp(r.x, 5, WORLD_W-5); r.y = clamp(r.y, 5, WORLD_H-5);
@@ -497,7 +504,12 @@ function aiHunter(p, dt) {
     p.y = campfire.y + Math.sin(a)*(campfire.light+p.r+2);
   } else {
     p.wT -= dt;
-    if (p.wT <= 0) { p.wT = rand(3,6); p.tx = p.x + rand(-120,120); p.ty = p.y + rand(-120,120); }
+    var pdx = p.tx - p.x, pdy = p.ty - p.y;
+    if (p.wT <= 0 || (pdx*pdx + pdy*pdy) < 100) {
+      p.wT = rand(0.8, 2.2);
+      p.tx = clamp(p.x + rand(-200, 200), 20, WORLD_W-20);
+      p.ty = clamp(p.y + rand(-200, 200), 20, WORLD_H-20);
+    }
     moveTo(p, p.tx, p.ty, dt);
   }
   if (p.aT > 0) p.aT -= dt;
@@ -614,11 +626,24 @@ function update(dt) {
 }
 
 // ---------- Draw ----------
+var _curFont = '';
+function setFont(size) {
+  var f = size + 'px serif';
+  if (_curFont !== f) { ctx.font = f; _curFont = f; }
+}
 function drawEmoji(x, y, e, size) {
-  ctx.font = size + 'px serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
+  setFont(size);
   ctx.fillText(e, x, y);
+}
+// safe-zone gradient cache
+var _safeGrad = null;
+function getSafeGrad() {
+  if (_safeGrad) return _safeGrad;
+  _safeGrad = ctx.createRadialGradient(campfire.x, campfire.y, 20, campfire.x, campfire.y, campfire.light);
+  _safeGrad.addColorStop(0, 'rgba(255, 200, 110, 0.35)');
+  _safeGrad.addColorStop(0.6, 'rgba(255, 160, 60, 0.12)');
+  _safeGrad.addColorStop(1, 'rgba(255, 160, 60, 0)');
+  return _safeGrad;
 }
 function draw() {
   // black bg
@@ -628,6 +653,9 @@ function draw() {
   ctx.save();
   ctx.translate(view.offX, view.offY);
   ctx.scale(view.scale, view.scale);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  _curFont = '';
 
   // grid (in world coords)
   var TILE = 60;
@@ -663,16 +691,10 @@ function draw() {
   var t = performance.now()/1000;
 
   // safe zone halo
-  var g = ctx.createRadialGradient(campfire.x, campfire.y, 20, campfire.x, campfire.y, campfire.light);
-  g.addColorStop(0, 'rgba(255, 200, 110, 0.35)');
-  g.addColorStop(0.6, 'rgba(255, 160, 60, 0.12)');
-  g.addColorStop(1, 'rgba(255, 160, 60, 0)');
-  ctx.fillStyle = g;
+  ctx.fillStyle = getSafeGrad();
   ctx.beginPath(); ctx.arc(campfire.x, campfire.y, campfire.light, 0, Math.PI*2); ctx.fill();
   ctx.strokeStyle = 'rgba(255, 200, 110, 0.6)'; ctx.lineWidth = 2 / view.scale;
-  ctx.setLineDash([10/view.scale, 6/view.scale]);
   ctx.beginPath(); ctx.arc(campfire.x, campfire.y, campfire.light, 0, Math.PI*2); ctx.stroke();
-  ctx.setLineDash([]);
 
   // dens
   for (var i = 0; i < dens.length; i++) {
@@ -730,21 +752,18 @@ function draw() {
   }
 
   // trees
+  setFont(44);
   for (var i = 0; i < trees.length; i++) {
     var tr = trees[i];
-    var sw = Math.sin(t + tr.sway) * 0.05;
-    ctx.save();
-    ctx.translate(tr.x, tr.y);
-    ctx.rotate(sw);
-    drawEmoji(0, 0, '🌳', 44);
-    ctx.restore();
+    ctx.fillText('🌳', tr.x, tr.y);
     if (tr.hp < tr.hpMax) hpBar(tr, 18);
   }
 
   // stones
+  setFont(36);
   for (var i = 0; i < stones.length; i++) {
     var s = stones[i];
-    drawEmoji(s.x, s.y, '🪨', 36);
+    ctx.fillText('🪨', s.x, s.y);
     if (s.hp < s.hpMax) hpBar(s, 16);
   }
 
@@ -769,28 +788,27 @@ function draw() {
   }
 
   // rabbits
+  setFont(26);
   for (var i = 0; i < rabbits.length; i++) {
     var r = rabbits[i];
-    drawEmoji(r.x, r.y, '🐰', 26);
+    ctx.fillText('🐰', r.x, r.y);
     if (r.hp < r.hpMax) hpBar(r, 14);
   }
 
   // wolves
+  setFont(34);
   for (var i = 0; i < wolves.length; i++) {
     var w = wolves[i];
-    drawEmoji(w.x, w.y, '🐺', 34);
+    ctx.fillText('🐺', w.x, w.y);
     hpBar(w, 18);
-    ctx.fillStyle = '#e15a5a'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText('KURT', w.x, w.y + 22);
   }
 
   // bears
+  setFont(44);
   for (var i = 0; i < bears.length; i++) {
     var b = bears[i];
-    drawEmoji(b.x, b.y, '🐻', 44);
+    ctx.fillText('🐻', b.x, b.y);
     hpBar(b, 22);
-    ctx.fillStyle = '#e15a5a'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText('AYI', b.x, b.y + 28);
   }
 
   // PLAYER — glow + emoji + name
