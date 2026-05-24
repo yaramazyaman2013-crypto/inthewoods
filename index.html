@@ -80,7 +80,8 @@
     <div id="msg"></div>
     <div id="help">
       <b>Sol Tık</b> yürü &nbsp; <b>Sağ Tık</b> saldır/topla/kır<br>
-      <b>1-8</b> eşya seç &nbsp; <b>E</b> et pişir (ateş yanında) &nbsp; <b>F</b> ye
+      <b>1-8</b> seç &nbsp; <b>F</b> et ye (veya seçili ete tekrar tıkla) &nbsp; <b>E</b> pişir<br>
+      🌱 Fidanı sağ tıkla → ekersin &nbsp; ⛏ Kazma → altın
     </div>
     <div id="dead">
       <h1>ÖLDÜN</h1>
@@ -165,6 +166,7 @@ var ITEMS = {
   axe:         { name:'Balta',       icon:'🪓' },
   pickaxe:     { name:'Kazma',       icon:'⛏' },
   sword:       { name:'Demir Kılıç', icon:'⚔'  },
+  sapling:     { name:'Fidan',       icon:'🌱' },
   table:       { name:'Çal. Masası', icon:'🔨' }
 };
 
@@ -181,9 +183,9 @@ var trees = [], stones = [], rabbits = [], wolves = [], bears = [];
 var ironOres = [], goldOres = [];
 var buildings = [], drops = [], placed = [], dens = [], particles = [], lakes = [];
 
-function spawnRabbit(x,y){ return { kind:'rabbit', x:x, y:y, r:8, hp:2, hpMax:2, speed:150, tx:x, ty:y, wT:0, fT:0 }; }
-function spawnWolf(x,y){ return { kind:'wolf', x:x, y:y, r:12, hp:6, hpMax:6, dmg:8, speed:120, tx:x, ty:y, wT:0, aT:0 }; }
-function spawnBear(x,y){ return { kind:'bear', x:x, y:y, r:18, hp:14, hpMax:14, dmg:16, speed:85, tx:x, ty:y, wT:0, aT:0 }; }
+function spawnRabbit(x,y){ return { kind:'rabbit', x:x, y:y, r:8, hp:2, hpMax:2, speed:80, vision:120, tx:x, ty:y, wT:0, fT:0 }; }
+function spawnWolf(x,y){ return { kind:'wolf', x:x, y:y, r:12, hp:6, hpMax:6, dmg:8, speed:110, vision:240, tx:x, ty:y, wT:0, aT:0 }; }
+function spawnBear(x,y){ return { kind:'bear', x:x, y:y, r:18, hp:14, hpMax:14, dmg:16, speed:80, vision:300, tx:x, ty:y, wT:0, aT:0 }; }
 
 function buildWorld() {
   // trees
@@ -301,7 +303,16 @@ function renderInv() {
     if (it) html += ITEMS[it.id].icon + '<span class="qty">' + it.qty + '</span>';
     d.innerHTML = html;
     if (it) d.title = ITEMS[it.id].name;
-    (function(idx){ d.onclick = function(){ player.sel = idx; renderInv(); }; })(i);
+    (function(idx){
+      d.onclick = function(){
+        var was = player.sel;
+        if (was === idx && player.inv[idx]) {
+          var id = player.inv[idx].id;
+          if (id === 'meat_cooked' || id === 'meat_raw') { eatMeat(id); return; }
+        }
+        player.sel = idx; renderInv();
+      };
+    })(i);
     el.appendChild(d);
   }
   renderCraft();
@@ -399,12 +410,20 @@ function cook() {
   burst(campfire.x, campfire.y-6, '#ffb86b', 12);
   showMsg('🍖 ' + n + ' et pişti');
 }
-function eatMeat() {
+function eatMeat(which) {
+  if (which === 'meat_raw' || (!which && countItem('meat_cooked') === 0 && countItem('meat_raw') > 0)) {
+    if (countItem('meat_raw') < 1) { showMsg('Et yok'); return; }
+    removeItem('meat_raw', 1);
+    player.hu = clamp(player.hu + 15, 0, 100);
+    player.hp = clamp(player.hp - 5, 0, player.hpMax);
+    showMsg('🥩 Çiğ yedin (+15 açlık, -5 can)');
+    return;
+  }
   if (countItem('meat_cooked') > 0) {
     removeItem('meat_cooked', 1);
     player.hu = clamp(player.hu + 35, 0, 100);
     player.hp = clamp(player.hp + 10, 0, player.hpMax);
-    showMsg('🍖 Doydun (+35)');
+    showMsg('🍖 Doydun (+35 açlık, +10 can)');
   } else { showMsg('Pişmiş et yok'); }
 }
 
@@ -417,6 +436,18 @@ function interact(wp) {
     }
   }
   var tool = getTool();
+  // plant sapling
+  if (tool === 'sapling' && dist(wp, player) < 80 && dist(wp, campfire) > campfire.r + 10) {
+    // check not too close to existing tree
+    var tooClose = false;
+    for (var i = 0; i < trees.length; i++) if (dist(trees[i], wp) < 40) { tooClose = true; break; }
+    if (tooClose) { showMsg('🌱 Buraya başka ağaç var'); return; }
+    removeItem('sapling', 1);
+    trees.push({ x: wp.x, y: wp.y, hp: 3, hpMax: 3, r: 18, sway: Math.random()*6 });
+    burst(wp.x, wp.y, '#6dd07a', 5);
+    showMsg('🌱 Fidan ekildi');
+    return;
+  }
   var best = null, bestType = null, bestD = 50;
   function check(arr, type) {
     for (var i = 0; i < arr.length; i++) {
@@ -437,7 +468,11 @@ function interact(wp) {
     var dmg = tool === 'axe' ? 2 : (tool === 'stone' || tool === 'knife') ? 1 : 0.4;
     best.hp -= dmg;
     burst(best.x, best.y, '#3a5a2a', 4);
-    if (best.hp <= 0) { drops.push({x:best.x,y:best.y,id:'wood',qty:2}); trees.splice(trees.indexOf(best),1); }
+    if (best.hp <= 0) {
+      drops.push({x:best.x,y:best.y,id:'wood',qty:2});
+      if (Math.random() < 0.55) drops.push({x:best.x+10,y:best.y+10,id:'sapling',qty:1});
+      trees.splice(trees.indexOf(best),1);
+    }
   } else if (bestType === 'stone') {
     var dmg = (tool === 'stone' || tool === 'axe') ? 1 : 0.3;
     best.hp -= dmg;
@@ -507,17 +542,20 @@ function moveTo(e, tx, ty, dt) {
   e.x += dx/d * e.speed * dt; e.y += dy/d * e.speed * dt;
 }
 function aiRabbit(r, dt) {
-  if (r.fT > 0) {
+  var dp = dist(r, player);
+  // flee if in vision OR was attacked
+  if (r.fT > 0 || (dp < r.vision && !inSafe(player))) {
+    if (r.fT <= 0) r.fT = 0.3;
     r.fT -= dt;
     var dx = r.x - player.x, dy = r.y - player.y, d = Math.sqrt(dx*dx+dy*dy)||1;
-    r.x += dx/d * r.speed * 1.7 * dt; r.y += dy/d * r.speed * 1.7 * dt;
+    r.x += dx/d * r.speed * 1.8 * dt; r.y += dy/d * r.speed * 1.8 * dt;
   } else {
     r.wT -= dt;
     var rdx = r.tx - r.x, rdy = r.ty - r.y;
     if (r.wT <= 0 || (rdx*rdx + rdy*rdy) < 100) {
-      r.wT = rand(0.3, 1.2);
-      r.tx = clamp(r.x + rand(-180, 180), 20, WORLD_W-20);
-      r.ty = clamp(r.y + rand(-180, 180), 20, WORLD_H-20);
+      r.wT = rand(0.5, 1.8);
+      r.tx = clamp(r.x + rand(-150, 150), 20, WORLD_W-20);
+      r.ty = clamp(r.y + rand(-150, 150), 20, WORLD_H-20);
     }
     moveTo(r, r.tx, r.ty, dt);
   }
@@ -525,14 +563,32 @@ function aiRabbit(r, dt) {
 }
 function aiHunter(p, dt) {
   var pSafe = inSafe(player), eSafe = inSafe(p), dp = dist(p, player);
-  if (!pSafe && dp < 400 && !eSafe) {
+  if (!pSafe && dp < p.vision && !eSafe) {
+    // chase with tangent detour around campfire
     var dx = player.x - p.x, dy = player.y - p.y, d = Math.sqrt(dx*dx+dy*dy)||1;
-    var nx = p.x + dx/d * p.speed * dt, ny = p.y + dy/d * p.speed * dt;
-    var dn = Math.sqrt((nx-campfire.x)*(nx-campfire.x)+(ny-campfire.y)*(ny-campfire.y));
-    if (dn < campfire.light + p.r) {
+    var nx, ny;
+    // check if direct line passes through safe zone
+    var safeR = campfire.light + p.r + 4;
+    var cx = campfire.x - p.x, cy = campfire.y - p.y;
+    var dCamp = Math.sqrt(cx*cx + cy*cy);
+    var proj = (cx*dx + cy*dy) / d; // projection of campfire onto path
+    var perpD = Math.abs(cx*(-dy) + cy*dx) / d; // perpendicular distance
+    if (proj > 0 && proj < d + safeR && perpD < safeR && dCamp > safeR * 0.6) {
+      // tangent direction — perpendicular to (p -> campfire), choose side closer to player
+      var tx = -cy/dCamp, ty = cx/dCamp;
+      if (tx*dx + ty*dy < 0) { tx = -tx; ty = -ty; }
+      nx = p.x + tx * p.speed * dt;
+      ny = p.y + ty * p.speed * dt;
+    } else {
+      nx = p.x + dx/d * p.speed * dt;
+      ny = p.y + dy/d * p.speed * dt;
+    }
+    // hard guard: never enter safe zone
+    var ddn = Math.sqrt((nx-campfire.x)*(nx-campfire.x)+(ny-campfire.y)*(ny-campfire.y));
+    if (ddn < safeR) {
       var a = Math.atan2(ny-campfire.y, nx-campfire.x);
-      nx = campfire.x + Math.cos(a)*(campfire.light+p.r);
-      ny = campfire.y + Math.sin(a)*(campfire.light+p.r);
+      nx = campfire.x + Math.cos(a)*safeR;
+      ny = campfire.y + Math.sin(a)*safeR;
     }
     p.x = nx; p.y = ny;
     p.aT -= dt;
