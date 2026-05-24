@@ -72,17 +72,63 @@
   .tip { font-size: 11px; color: #888; line-height: 1.5; }
   /* start screen */
   #start {
-    position: fixed; inset: 0; background: linear-gradient(135deg, #0a1a0a, #1a2a18);
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse at 50% 110%, #2a3a18 0%, #0a1408 60%, #050a04 100%);
+    overflow: hidden;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     z-index: 100; gap: 20px;
   }
   #start.hide { display: none; }
-  #start h1 {
-    font-size: 56px; color: #ffb86b; letter-spacing: 6px;
-    text-shadow: 0 0 20px rgba(255,184,107,.5);
+  /* sky + stars */
+  #start::before {
+    content: ''; position: absolute; inset: 0;
+    background:
+      radial-gradient(2px 2px at 20% 12%, #fff, transparent 50%),
+      radial-gradient(1px 1px at 35% 8%, #fff, transparent 50%),
+      radial-gradient(1.5px 1.5px at 55% 18%, #ddd, transparent 50%),
+      radial-gradient(1px 1px at 70% 6%, #fff, transparent 50%),
+      radial-gradient(2px 2px at 82% 14%, #fff, transparent 50%),
+      radial-gradient(1px 1px at 92% 9%, #ddd, transparent 50%),
+      radial-gradient(1px 1px at 12% 22%, #fff, transparent 50%),
+      radial-gradient(1.5px 1.5px at 45% 24%, #fff, transparent 50%),
+      radial-gradient(1px 1px at 68% 26%, #ddd, transparent 50%);
+    pointer-events: none;
   }
-  #start .sub { color: #888; font-size: 13px; letter-spacing: 2px; margin-top: -16px; }
-  #start .menu { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+  /* moon */
+  #start::after {
+    content: '🌙'; position: absolute; top: 8%; right: 10%; font-size: 70px;
+    text-shadow: 0 0 30px rgba(255,230,150,.5);
+    animation: float 6s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+  @keyframes sway { 0%,100%{transform:rotate(-1.5deg)} 50%{transform:rotate(1.5deg)} }
+  #scenery {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: 50%; pointer-events: none;
+    background: linear-gradient(180deg, transparent 0%, rgba(20,40,18,0.4) 60%, rgba(10,20,8,0.95) 100%);
+  }
+  #scenery .tree, #scenery .item {
+    position: absolute; bottom: var(--b, 10%);
+    transform-origin: center bottom;
+    animation: sway 5s ease-in-out infinite;
+  }
+  #scenery .item { animation: float 4s ease-in-out infinite; }
+  #scenery .glow {
+    position: absolute; bottom: 12%; left: 50%; transform: translateX(-50%);
+    width: 320px; height: 160px;
+    background: radial-gradient(ellipse at center bottom, rgba(255,180,80,.5), transparent 70%);
+    pointer-events: none;
+  }
+  #start h1 {
+    font-size: 64px; color: #ffb86b; letter-spacing: 8px;
+    text-shadow: 0 0 24px rgba(255,184,107,.6), 0 4px 18px rgba(0,0,0,.8);
+    position: relative; z-index: 2;
+  }
+  #start .sub { color: #aaa; font-size: 13px; letter-spacing: 4px; margin-top: -16px; position: relative; z-index: 2; }
+  #start .menu { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; position: relative; z-index: 2; }
+  #start .panel { position: relative; z-index: 2; }
   #start button {
     background: #2a2a2a; color: #ffb86b; border: 2px solid #5a4520;
     padding: 14px 50px; font-size: 16px; font-weight: 700; letter-spacing: 2px;
@@ -164,8 +210,25 @@
   <button onclick="window.__goBack()">ANA MENÜ</button>
 </div>
 <div id="start">
+  <div id="scenery">
+    <div class="glow"></div>
+    <div class="tree" style="left:4%;font-size:120px;--b:5%;animation-delay:-1s">🌲</div>
+    <div class="tree" style="left:13%;font-size:90px;--b:8%;animation-delay:-2s">🌳</div>
+    <div class="tree" style="left:22%;font-size:140px;--b:3%;animation-delay:-3s">🌲</div>
+    <div class="tree" style="left:32%;font-size:80px;--b:12%;animation-delay:-1.5s">🌳</div>
+    <div class="item" style="left:39%;font-size:48px;--b:7%">🪨</div>
+    <div class="tree" style="left:46%;font-size:100px;--b:6%;animation-delay:-0.5s">🌲</div>
+    <div class="item" style="left:49%;font-size:70px;--b:3%;animation:float 2s ease-in-out infinite">🔥</div>
+    <div class="tree" style="left:55%;font-size:110px;--b:9%;animation-delay:-2.5s">🌳</div>
+    <div class="item" style="left:62%;font-size:40px;--b:14%;animation-delay:-1s">🐰</div>
+    <div class="tree" style="left:67%;font-size:130px;--b:4%;animation-delay:-1.8s">🌲</div>
+    <div class="tree" style="left:76%;font-size:95px;--b:10%;animation-delay:-3.5s">🌳</div>
+    <div class="item" style="left:82%;font-size:50px;--b:6%;animation-delay:-2s">🦌</div>
+    <div class="tree" style="left:88%;font-size:115px;--b:5%;animation-delay:-0.8s">🌲</div>
+    <div class="tree" style="left:95%;font-size:85px;--b:11%;animation-delay:-2.2s">🌳</div>
+  </div>
   <h1>IN THE WOODS</h1>
-  <div class="sub">A SURVIVAL GAME</div>
+  <div class="sub">A SURVIVAL GAME · BY MIRROW</div>
   <div class="menu" id="mainMenu">
     <button onclick="window.__menu('play')">▶ OYNA</button>
     <button onclick="window.__menu('credits')">CREDITS</button>
@@ -380,7 +443,7 @@ function buildWorld() {
     var p, t = 0;
     do { p = { x: rand(40, WORLD_W-40), y: rand(40, WORLD_H-40) }; t++; }
     while (dist(p, campfire) < 130 && t < 20);
-    trees.push({ x:p.x, y:p.y, hp:3, hpMax:3, r:18, sway:Math.random()*6 });
+    trees.push({ x:p.x, y:p.y, hp:3, hpMax:3, r:18, sway:Math.random()*6, growth:1 });
   }
   // stones
   for (var i = 0; i < 28; i++) {
@@ -758,9 +821,9 @@ function interact(wp) {
     for (var i = 0; i < trees.length; i++) if (dist(trees[i], wp) < 40) { tooClose = true; break; }
     if (tooClose) { showMsg('🌱 Buraya başka ağaç var'); return; }
     removeItem('sapling', 1);
-    trees.push({ x: wp.x, y: wp.y, hp: 3, hpMax: 3, r: 18, sway: Math.random()*6 });
+    trees.push({ x: wp.x, y: wp.y, hp: 1, hpMax: 3, r: 18, sway: Math.random()*6, growth: 0 });
     burst(wp.x, wp.y, '#6dd07a', 5);
-    showMsg('🌱 Fidan ekildi');
+    showMsg('🌱 Fidan ekildi — yetişmesi 60s');
     return;
   }
   var best = null, bestType = null, bestD = 50;
@@ -782,6 +845,7 @@ function interact(wp) {
   player.face = Math.atan2(best.y - player.y, best.x - player.x);
 
   if (bestType === 'tree') {
+    if ((best.growth || 1) < 1) { showMsg('🌱 Henüz büyümedi'); return; }
     var dmg = tool === 'axe' ? 2 : (tool === 'stone' || tool === 'knife') ? 1 : 0.4;
     best.hp -= dmg;
     burst(best.x, best.y, '#3a5a2a', 4);
@@ -1066,6 +1130,16 @@ function update(dt) {
         else if (dn.kind==='chicken') chickens.push(spawnChicken(sx,sy));
         else if (dn.kind==='sheep') sheeps.push(spawnSheep(sx,sy));
       }
+    }
+  }
+
+  // tree growth (60 seconds from sapling to full tree)
+  for (var i = 0; i < trees.length; i++) {
+    var tr = trees[i];
+    if (tr.growth === undefined) tr.growth = 1;
+    if (tr.growth < 1) {
+      tr.growth = Math.min(1, tr.growth + dt / 60);
+      if (tr.growth >= 1) tr.hp = tr.hpMax;
     }
   }
 
@@ -1414,13 +1488,23 @@ function draw() {
     }
   }
 
-  // trees
-  setFont(44);
+  // trees — small while growing
   for (var i = 0; i < trees.length; i++) {
     var tr = trees[i];
-    ctx.fillText('🌳', tr.x, tr.y);
+    var sz = Math.round(18 + (tr.growth || 1) * 26);
+    setFont(sz);
+    if ((tr.growth || 1) < 1) {
+      ctx.fillText('🌱', tr.x, tr.y);
+      // growth bar
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(tr.x - 14, tr.y - 18, 28, 4);
+      ctx.fillStyle = '#6dd07a';
+      ctx.fillRect(tr.x - 13.5, tr.y - 17.5, 27 * tr.growth, 3);
+    } else {
+      ctx.fillText('🌳', tr.x, tr.y);
+    }
   }
-  for (var i = 0; i < trees.length; i++) if (trees[i].hp < trees[i].hpMax) hpBar(trees[i], 18);
+  for (var i = 0; i < trees.length; i++) if (trees[i].hp < trees[i].hpMax && (trees[i].growth || 1) >= 1) hpBar(trees[i], 18);
 
   // stones
   setFont(36);
@@ -1687,13 +1771,14 @@ function stopFishing(won) {
 }
 function updateFishing(dt) {
   if (!fishing) return;
-  var BAR = 280, ZONE_BOTTOM_PAD = 0;
-  // mark physics — snappier
-  fishing.vel += (fishing.holding ? -900 : 700) * dt;
-  fishing.vel *= 0.88;
+  var BAR = 280;
+  // direct velocity control — basılı tut yukarı, bırak aşağı (snappy)
+  var targetVel = fishing.holding ? -380 : 380;
+  // ease toward target velocity quickly
+  fishing.vel += (targetVel - fishing.vel) * Math.min(1, dt * 18);
   fishing.markY += fishing.vel * dt;
-  if (fishing.markY < 0) { fishing.markY = 0; fishing.vel = 0; }
-  if (fishing.markY > BAR - 4) { fishing.markY = BAR - 4; fishing.vel = 0; }
+  if (fishing.markY < 0) { fishing.markY = 0; fishing.vel = Math.max(0, fishing.vel); }
+  if (fishing.markY > BAR - 4) { fishing.markY = BAR - 4; fishing.vel = Math.min(0, fishing.vel); }
   // zone moves
   fishing.zoneY += fishing.zoneVel * dt;
   if (fishing.zoneY < 0) { fishing.zoneY = 0; fishing.zoneVel = -fishing.zoneVel; }
