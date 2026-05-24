@@ -106,20 +106,32 @@
   @keyframes sway { 0%,100%{transform:rotate(-1.5deg)} 50%{transform:rotate(1.5deg)} }
   #scenery {
     position: absolute; inset: 0; pointer-events: none;
+    overflow: hidden;
     background: linear-gradient(180deg, transparent 0%, transparent 40%, rgba(20,40,18,0.45) 75%, rgba(10,20,8,0.9) 100%);
+  }
+  /* darker ground strip so the trees look planted */
+  #scenery::before {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 5%;
+    background: linear-gradient(180deg, rgba(15,30,10,0.5), #051005 80%);
+    z-index: 1;
   }
   #scenery .tree, #scenery .item, #scenery .stack {
     position: absolute; bottom: var(--b, 0);
     transform-origin: center bottom;
     animation: sway 5s ease-in-out infinite;
+    line-height: 0.72;
+    /* emojis sit high in their line-box — push down so visual base touches ground */
+    transform: translateY(18%);
   }
-  #scenery .item { animation: float 4s ease-in-out infinite; }
+  #scenery .item { animation: float 4s ease-in-out infinite; transform: translateY(10%); }
   #scenery .stack {
-    line-height: 0.78; text-align: center;
+    line-height: 0.74; text-align: center;
     display: flex; flex-direction: column;
+    transform: translateY(12%);
   }
   #scenery .stack span { display: block; }
-  #scenery .fly { position: absolute; animation: float 4s ease-in-out infinite; }
+  /* flying creatures actually fly — keep them up */
+  #scenery .fly { position: absolute; animation: float 4s ease-in-out infinite; transform: none; }
   #scenery .glow {
     position: absolute; bottom: 12%; left: 50%; transform: translateX(-50%);
     width: 320px; height: 160px;
