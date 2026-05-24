@@ -118,6 +118,15 @@
 var cv = document.getElementById('cv');
 var ctx = cv.getContext('2d');
 var W = 1200, H = 800;
+var WORLD_W = 1800, WORLD_H = 1200;
+var view = { scale: 1, offX: 0, offY: 0 };
+
+function computeView() {
+  var sx = W / WORLD_W, sy = H / WORLD_H;
+  view.scale = Math.min(sx, sy);
+  view.offX = (W - WORLD_W * view.scale) / 2;
+  view.offY = (H - WORLD_H * view.scale) / 2;
+}
 
 function fit() {
   var l = document.getElementById('left');
@@ -126,23 +135,12 @@ function fit() {
   H = Math.max(300, Math.floor(r.height));
   cv.width = W;
   cv.height = H;
-  if (typeof computeView === 'function') computeView();
+  computeView();
 }
 window.addEventListener('resize', fit);
 window.addEventListener('load', fit);
 fit();
-computeView();
 try { new ResizeObserver(fit).observe(document.getElementById('left')); } catch(e) {}
-
-// ---------- Util ----------
-var WORLD_W = 1800, WORLD_H = 1200;
-var view = { scale: 1, offX: 0, offY: 0 };
-function computeView() {
-  var sx = W / WORLD_W, sy = H / WORLD_H;
-  view.scale = Math.min(sx, sy);
-  view.offX = (W - WORLD_W * view.scale) / 2;
-  view.offY = (H - WORLD_H * view.scale) / 2;
-}
 function rand(a,b){ return a + Math.random()*(b-a); }
 function clamp(v,a,b){ return v<a?a:v>b?b:v; }
 function dist(a,b){ var dx=a.x-b.x, dy=a.y-b.y; return Math.sqrt(dx*dx+dy*dy); }
@@ -176,7 +174,7 @@ var player = {
 };
 var campfire = { x: WORLD_W/2, y: WORLD_H/2, r: 18, light: 170 };
 var trees = [], stones = [], rabbits = [], wolves = [], bears = [];
-var buildings = [], drops = [], placed = [], dens = [], particles = [];
+var buildings = [], drops = [], placed = [], dens = [], particles = [], lakes = [];
 
 function spawnRabbit(x,y){ return { kind:'rabbit', x:x, y:y, r:8, hp:2, hpMax:2, speed:110, tx:x, ty:y, wT:0, fT:0 }; }
 function spawnWolf(x,y){ return { kind:'wolf', x:x, y:y, r:12, hp:6, hpMax:6, dmg:8, speed:90, tx:x, ty:y, wT:0, aT:0 }; }
@@ -197,12 +195,20 @@ function buildWorld() {
     while (dist(p, campfire) < 110 && t < 20);
     stones.push({ x:p.x, y:p.y, hp:3, hpMax:3, r:14 });
   }
-  // buildings
-  for (var i = 0; i < 5; i++) {
+  // structures — variety: ruin, plane wreck, lake
+  var structKinds = ['ruin', 'plane', 'ruin', 'plane', 'ruin', 'campsite'];
+  for (var i = 0; i < structKinds.length; i++) {
     var p, t = 0;
-    do { p = { x: rand(150, WORLD_W-150), y: rand(150, WORLD_H-150) }; t++; }
-    while (dist(p, campfire) < 240 && t < 20);
-    buildings.push({ x:p.x, y:p.y, w:80, h:70, looted:false });
+    do { p = { x: rand(180, WORLD_W-180), y: rand(180, WORLD_H-180) }; t++; }
+    while (dist(p, campfire) < 260 && t < 20);
+    buildings.push({ x:p.x, y:p.y, kind:structKinds[i], r: 36, looted:false });
+  }
+  // lakes (visual obstacles, no loot)
+  for (var i = 0; i < 2; i++) {
+    var p, t = 0;
+    do { p = { x: rand(200, WORLD_W-200), y: rand(200, WORLD_H-200) }; t++; }
+    while (dist(p, campfire) < 300 && t < 20);
+    lakes.push({ x:p.x, y:p.y, rx: rand(70, 110), ry: rand(50, 80) });
   }
   // dens (rabbit/wolf/bear)
   var defs = [
@@ -432,8 +438,11 @@ function interact(wp) {
   } else if (bestType === 'bldg') {
     if (!best.looted) {
       best.looted = true;
-      var loots = [{id:'knife',qty:1},{id:'wood',qty:3},{id:'stone',qty:2},{id:'meat_cooked',qty:1}];
-      var L = loots[Math.floor(Math.random()*loots.length)];
+      var pool;
+      if (best.kind === 'plane') pool = [{id:'knife',qty:1},{id:'stone',qty:3},{id:'meat_cooked',qty:2}];
+      else if (best.kind === 'campsite') pool = [{id:'wood',qty:4},{id:'meat_cooked',qty:1},{id:'knife',qty:1}];
+      else pool = [{id:'wood',qty:3},{id:'stone',qty:2},{id:'knife',qty:1}];
+      var L = pool[Math.floor(Math.random()*pool.length)];
       addItem(L.id, L.qty);
       showMsg('📦 ' + L.qty + ' ' + ITEMS[L.id].name);
     } else { showMsg('Boş'); }
@@ -677,13 +686,38 @@ function draw() {
     ctx.fillText((dn.kind==='bear'?'AYI':dn.kind==='wolf'?'KURT':'TAVŞAN') + ' İNİ', dn.x, dn.y + 30);
   }
 
-  // buildings
+  // lakes (below structures)
+  for (var i = 0; i < lakes.length; i++) {
+    var lk = lakes[i];
+    ctx.fillStyle = '#0a3a5a';
+    ctx.beginPath(); ctx.ellipse(lk.x, lk.y, lk.rx, lk.ry, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#1a5a8a';
+    ctx.beginPath(); ctx.ellipse(lk.x, lk.y, lk.rx*0.9, lk.ry*0.85, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#3a7aaa';
+    ctx.beginPath(); ctx.ellipse(lk.x - lk.rx*0.3, lk.y - lk.ry*0.3, lk.rx*0.3, lk.ry*0.2, 0, 0, Math.PI*2); ctx.fill();
+    // ripple
+    var rp = (t * 0.5) % 1;
+    ctx.strokeStyle = 'rgba(180,220,255,' + (1-rp)*0.4 + ')'; ctx.lineWidth = 1.5/view.scale;
+    ctx.beginPath(); ctx.ellipse(lk.x, lk.y, lk.rx*rp*0.6, lk.ry*rp*0.6, 0, 0, Math.PI*2); ctx.stroke();
+    drawEmoji(lk.x, lk.y, '🌊', 24);
+    ctx.fillStyle = '#aaccee'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('GÖL', lk.x, lk.y + lk.ry + 14);
+  }
+
+  // structures
   for (var i = 0; i < buildings.length; i++) {
     var b = buildings[i];
-    drawEmoji(b.x, b.y, b.looted ? '🏚️' : '🏠', 56);
-    if (!b.looted) {
-      ctx.fillStyle = '#ffb86b'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText('YAĞMA', b.x, b.y + 38);
+    var emoji, label;
+    if (b.kind === 'plane') { emoji = '✈️'; label = 'UÇAK ENKAZI'; }
+    else if (b.kind === 'campsite') { emoji = '⛺'; label = 'KAMP'; }
+    else { emoji = '🏚️'; label = 'YIKIK EV'; }
+    drawEmoji(b.x, b.y, emoji, 56);
+    if (b.looted) {
+      ctx.fillStyle = '#666'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('boş', b.x, b.y + 38);
+    } else {
+      ctx.fillStyle = '#ffb86b'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(label + ' • YAĞMA', b.x, b.y + 38);
     }
   }
 
