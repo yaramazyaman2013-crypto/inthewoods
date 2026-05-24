@@ -98,11 +98,7 @@
     <div id="help">
       <b>Sol Tık</b> yürü &nbsp; <b>Sağ Tık</b> saldır/topla/kır<br>
       <b>1-8</b> seç &nbsp; <b>F</b> ye &nbsp; <b>E</b> pişir &nbsp; <b>Q</b> bırak<br>
-      🌱 sağ tık → ek &nbsp; 📦 sandığa sağ tık → aç &nbsp; ⛏ → altın
-    </div>
-    <div id="dead">
-      <h1>ÖLDÜN</h1>
-      <button onclick="location.reload()">YENİDEN BAŞLA</button>
+      🌱 sağ tık → ek &nbsp; 📦 → aç &nbsp; 🛏 → uyu (gece)
     </div>
     <div id="chestUI">
       <button class="close" onclick="window.__closeChest()">✕</button>
@@ -135,11 +131,11 @@
 
     <h3>İpuçları</h3>
     <div class="tip">
-      • Kamp ateşinin sarı halkasına gir, güvendesin.<br>
-      • Taşla ağaç ve taş kır.<br>
-      • Balta ile <b style="color:#d8a070">demir 🔩</b> çıkar, kazma ile <b style="color:#ffd060">altın 🪙</b>.<br>
-      • 4 odun → Masa → balta/bıçak/kazma/kılıç.<br>
-      • Tavşan 1, kurt 2, ayı 3 et verir.
+      • Harita karanlık — keşfettikçe açılır.<br>
+      • Öldüğünde kamp ateşinde doğarsın, eşyalar yerde kalır.<br>
+      • Gece <b style="color:#9aff7a">zombiler</b> çıkar, sabah yanarlar.<br>
+      • 🛏 Yatakta uyu → sabaha geç (zombiler yanar).<br>
+      • Balta → demir, kazma → altın.
     </div>
   </aside>
 </div>
@@ -152,14 +148,14 @@
 var cv = document.getElementById('cv');
 var ctx = cv.getContext('2d');
 var W = 1200, H = 800;
-var WORLD_W = 1800, WORLD_H = 1200;
-var view = { scale: 1, offX: 0, offY: 0 };
+var WORLD_W = 3600, WORLD_H = 2400;
+var view = { x: 0, y: 0, scale: 1 };
 
 function computeView() {
-  var sx = W / WORLD_W, sy = H / WORLD_H;
-  view.scale = Math.min(sx, sy);
-  view.offX = (W - WORLD_W * view.scale) / 2;
-  view.offY = (H - WORLD_H * view.scale) / 2;
+  // camera follows player; scale stays 1 (use real px)
+  view.scale = 1;
+  view.x = clamp((player ? player.x : WORLD_W/2) - W/2, 0, Math.max(0, WORLD_W - W));
+  view.y = clamp((player ? player.y : WORLD_H/2) - H/2, 0, Math.max(0, WORLD_H - H));
 }
 
 function fit() {
@@ -201,6 +197,7 @@ var ITEMS = {
   sword:       { name:'Demir Kılıç', icon:'⚔'  },
   sapling:     { name:'Fidan',       icon:'🌱' },
   chest:       { name:'Sandık',      icon:'📦' },
+  bed:         { name:'Yatak',       icon:'🛏' },
   table:       { name:'Çal. Masası', icon:'🔨' }
 };
 
@@ -213,13 +210,36 @@ var player = {
   sel: 0, hitCool: 0, dmgCool: 0, face: 0
 };
 var campfire = { x: WORLD_W/2, y: WORLD_H/2, r: 18, light: 170 };
-var trees = [], stones = [], rabbits = [], wolves = [], bears = [];
+var trees = [], stones = [], rabbits = [], wolves = [], bears = [], zombies = [];
 var ironOres = [], goldOres = [];
 var buildings = [], drops = [], placed = [], dens = [], particles = [], lakes = [];
+
+// fog of war
+var FOG_CELL = 80;
+var FOG_W = Math.ceil(WORLD_W / FOG_CELL);
+var FOG_H = Math.ceil(WORLD_H / FOG_CELL);
+var fog = new Uint8Array(FOG_W * FOG_H); // 0 = unseen, 1 = seen
+function revealAround(x, y, radius) {
+  var cx = Math.floor(x / FOG_CELL), cy = Math.floor(y / FOG_CELL);
+  var rc = Math.ceil(radius / FOG_CELL);
+  for (var dy = -rc; dy <= rc; dy++) {
+    for (var dx = -rc; dx <= rc; dx++) {
+      var nx = cx + dx, ny = cy + dy;
+      if (nx < 0 || ny < 0 || nx >= FOG_W || ny >= FOG_H) continue;
+      if (dx*dx + dy*dy <= rc*rc) fog[ny * FOG_W + nx] = 1;
+    }
+  }
+}
+function isRevealed(x, y) {
+  var cx = Math.floor(x / FOG_CELL), cy = Math.floor(y / FOG_CELL);
+  if (cx < 0 || cy < 0 || cx >= FOG_W || cy >= FOG_H) return false;
+  return fog[cy * FOG_W + cx] === 1;
+}
 
 function spawnRabbit(x,y){ return { kind:'rabbit', x:x, y:y, r:8, hp:2, hpMax:2, speed:80, vision:120, tx:x, ty:y, wT:0, fT:0 }; }
 function spawnWolf(x,y){ return { kind:'wolf', x:x, y:y, r:12, hp:6, hpMax:6, dmg:8, speed:110, vision:240, tx:x, ty:y, wT:0, aT:0 }; }
 function spawnBear(x,y){ return { kind:'bear', x:x, y:y, r:18, hp:14, hpMax:14, dmg:16, speed:80, vision:300, tx:x, ty:y, wT:0, aT:0 }; }
+function spawnZombie(x,y){ return { kind:'zombie', x:x, y:y, r:13, hp:8, hpMax:8, dmg:10, speed:65, vision:280, tx:x, ty:y, wT:0, aT:0, burnT:0 }; }
 
 function buildWorld() {
   // trees
@@ -295,6 +315,9 @@ function buildWorld() {
   }
 }
 buildWorld();
+// initial reveal around player + campfire
+revealAround(campfire.x, campfire.y, 300);
+revealAround(player.x, player.y, 220);
 
 function inSafe(e){ return dist(e, campfire) < campfire.light; }
 
@@ -358,7 +381,8 @@ var RECIPES = [
   { id:'knife',   name:'Bıçak',          cost:{stone:2, wood:1},      needTable:true },
   { id:'pickaxe', name:'Kazma',          cost:{iron:2, wood:2},       needTable:true },
   { id:'sword',   name:'Demir Kılıç',    cost:{iron:3, wood:1},       needTable:true },
-  { id:'chest',   name:'Sandık',         cost:{wood:6, iron:1},       needTable:true, place:true }
+  { id:'chest',   name:'Sandık',         cost:{wood:6, iron:1},       needTable:true, place:true },
+  { id:'bed',     name:'Yatak',          cost:{wood:6, sapling:2},    needTable:true, place:true }
 ];
 
 function renderCraft() {
@@ -400,7 +424,7 @@ function craft(r) {
   for (var k in r.cost) if (countItem(k) < r.cost[k]) return;
   for (var k in r.cost) removeItem(k, r.cost[k]);
   if (r.place) {
-    var newP = { kind:r.id, x:player.x + 35, y:player.y, r:18 };
+    var newP = { kind:r.id, x:player.x + 40, y:player.y, r:22 };
     if (r.id === 'chest') newP.inv = [];
     placed.push(newP);
     showMsg('✓ ' + ITEMS[r.id].name + ' yerleştirildi');
@@ -414,7 +438,7 @@ function craft(r) {
 renderInv();
 
 // ---------- Input ----------
-function s2w(mx, my) { return { x: (mx - view.offX) / view.scale, y: (my - view.offY) / view.scale }; }
+function s2w(mx, my) { return { x: mx + view.x, y: my + view.y }; }
 
 cv.addEventListener('contextmenu', function(e){ e.preventDefault(); });
 cv.addEventListener('mousedown', function(e) {
@@ -534,11 +558,14 @@ function eatMeat(which) {
 
 function interact(wp) {
   if (player.hitCool > 0) return;
-  // chest open
+  // chest open / bed sleep
   for (var i = 0; i < placed.length; i++) {
     var pp = placed[i];
     if (pp.kind === 'chest' && dist(pp, wp) < 28 && dist(pp, player) < 70) {
       openChestUI(pp); return;
+    }
+    if (pp.kind === 'bed' && dist(pp, wp) < 30 && dist(pp, player) < 70) {
+      trySleep(pp); return;
     }
   }
   // drop pickup if very close to click
@@ -729,8 +756,8 @@ function aiHunter(p, dt) {
 
 // ---------- Loop ----------
 var last = performance.now();
-var statT = 0, dayT = 0, day = 1, cookT = 0, craftT = 0;
-var dead = false;
+var statT = 0, dayT = 0, day = 1, cookT = 0, craftT = 0, zombieSpawnT = 5, sleeping = false;
+var dead = false; // unused now; respawn handles death
 
 function step(now) {
   var dt = Math.min(0.05, (now - last)/1000);
@@ -752,6 +779,10 @@ function update(dt) {
   if (player.hitCool > 0) player.hitCool -= dt;
   if (player.dmgCool > 0) player.dmgCool -= dt;
 
+  // fog of war reveal
+  revealAround(player.x, player.y, 220);
+  computeView();
+
   statT += dt;
   if (statT >= 1) {
     statT = 0;
@@ -765,6 +796,34 @@ function update(dt) {
   for (var i = 0; i < rabbits.length; i++) aiRabbit(rabbits[i], dt);
   for (var i = 0; i < wolves.length; i++) aiHunter(wolves[i], dt);
   for (var i = 0; i < bears.length; i++) aiHunter(bears[i], dt);
+  for (var i = zombies.length - 1; i >= 0; i--) aiHunter(zombies[i], dt);
+
+  // night zombie spawns
+  var phaseNow = dayT / 90;
+  var night = phaseNow >= 0.7;
+  zombieSpawnT -= dt;
+  if (night && zombieSpawnT <= 0 && zombies.length < 12) {
+    zombieSpawnT = rand(3, 7);
+    // spawn far from player and outside safe zone
+    var sx, sy, tries = 0;
+    do {
+      sx = rand(40, WORLD_W - 40); sy = rand(40, WORLD_H - 40); tries++;
+    } while ((dist({x:sx,y:sy}, player) < 400 || dist({x:sx,y:sy}, campfire) < campfire.light + 40) && tries < 20);
+    zombies.push(spawnZombie(sx, sy));
+  }
+  // zombie burn during day
+  for (var i = zombies.length - 1; i >= 0; i--) {
+    var z = zombies[i];
+    if (!night) {
+      z.burnT += dt;
+      z.hp -= 6 * dt;
+      if (z.burnT > 0.15) { burst(z.x, z.y, '#ff7020', 2); z.burnT = 0; }
+    } else z.burnT = 0;
+    if (z.hp <= 0) {
+      drops.push({ x:z.x, y:z.y, id:'meat_raw', qty:1 });
+      zombies.splice(i, 1);
+    }
+  }
 
   for (var i = 0; i < dens.length; i++) {
     var dn = dens[i];
@@ -826,14 +885,55 @@ function update(dt) {
   document.getElementById('t_hu').textContent = Math.ceil(player.hu);
   document.getElementById('t_en').textContent = Math.ceil(player.en);
 
-  if (player.hp <= 0) {
-    dead = true;
-    document.getElementById('dead').classList.add('show');
-  }
+  if (player.hp <= 0) respawn();
 
   // re-render craft only periodically to keep buttons clickable
   craftT += dt;
   if (craftT >= 0.5) { craftT = 0; renderCraft(); }
+}
+
+function trySleep(bed) {
+  var phase = dayT / 90;
+  if (phase < 0.7) { showMsg('🛏 Yatak sadece geceleri kullanılır'); return; }
+  // check no enemies nearby
+  function near(arr) { for (var i = 0; i < arr.length; i++) if (dist(arr[i], player) < 250) return true; return false; }
+  if (near(zombies) || near(wolves) || near(bears)) {
+    showMsg('😱 Etrafta düşman var, uyuyamazsın'); return;
+  }
+  // skip to morning (phase = 0)
+  dayT = 0; day++;
+  player.en = 100;
+  player.hp = clamp(player.hp + 30, 0, player.hpMax);
+  // remove zombies (they burn at sunrise)
+  for (var i = zombies.length - 1; i >= 0; i--) {
+    drops.push({ x:zombies[i].x, y:zombies[i].y, id:'meat_raw', qty:1 });
+    burst(zombies[i].x, zombies[i].y, '#ff7020', 3);
+  }
+  zombies = [];
+  showMsg('💤 İyi uyudun — sabah oldu');
+}
+
+function respawn() {
+  // drop all inventory at death location
+  for (var i = 0; i < player.inv.length; i++) {
+    var it = player.inv[i];
+    drops.push({
+      x: player.x + rand(-15, 15),
+      y: player.y + rand(-15, 15),
+      id: it.id, qty: it.qty
+    });
+  }
+  player.inv = [];
+  player.sel = 0;
+  player.x = campfire.x + 20;
+  player.y = campfire.y + 30;
+  player.tx = player.x; player.ty = player.y;
+  player.hp = player.hpMax;
+  player.hu = 100;
+  player.en = 100;
+  player.dmgCool = 0;
+  renderInv();
+  showMsg('💀 Öldün — eşyaların kaldığın yerde. Geri al!');
 }
 
 // ---------- Draw ----------
@@ -858,8 +958,7 @@ function draw() {
   ctx.fillRect(0, 0, W, H);
 
   ctx.save();
-  ctx.translate(view.offX, view.offY);
-  ctx.scale(view.scale, view.scale);
+  ctx.translate(-view.x, -view.y);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   _curFont = '';
@@ -868,23 +967,18 @@ function draw() {
   ctx.fillStyle = '#243d22';
   ctx.fillRect(0, 0, WORLD_W, WORLD_H);
 
-  // grid (in world coords)
+  // grid — only draw visible cells
   var TILE = 60;
-  ctx.strokeStyle = 'rgba(0,0,0,0.18)';
-  ctx.lineWidth = 1 / view.scale;
+  var gx0 = Math.floor(view.x / TILE) * TILE;
+  var gy0 = Math.floor(view.y / TILE) * TILE;
+  var gx1 = view.x + W, gy1 = view.y + H;
+  ctx.strokeStyle = 'rgba(0,0,0,0.22)'; ctx.lineWidth = 1;
   ctx.beginPath();
-  for (var x = 0; x <= WORLD_W; x += TILE) { ctx.moveTo(x, 0); ctx.lineTo(x, WORLD_H); }
-  for (var y = 0; y <= WORLD_H; y += TILE) { ctx.moveTo(0, y); ctx.lineTo(WORLD_W, y); }
-  ctx.stroke();
-  // major grid
-  ctx.strokeStyle = 'rgba(0,0,0,0.32)';
-  ctx.lineWidth = 1.5 / view.scale;
-  ctx.beginPath();
-  for (var x = 0; x <= WORLD_W; x += TILE*5) { ctx.moveTo(x, 0); ctx.lineTo(x, WORLD_H); }
-  for (var y = 0; y <= WORLD_H; y += TILE*5) { ctx.moveTo(0, y); ctx.lineTo(WORLD_W, y); }
+  for (var x = gx0; x <= gx1; x += TILE) { ctx.moveTo(x+0.5, view.y); ctx.lineTo(x+0.5, view.y + H); }
+  for (var y = gy0; y <= gy1; y += TILE) { ctx.moveTo(view.x, y+0.5); ctx.lineTo(view.x + W, y+0.5); }
   ctx.stroke();
   // world border
-  ctx.strokeStyle = '#5a3a1a'; ctx.lineWidth = 4 / view.scale;
+  ctx.strokeStyle = '#5a3a1a'; ctx.lineWidth = 4;
   ctx.strokeRect(0, 0, WORLD_W, WORLD_H);
 
   // safe zone halo
@@ -1070,6 +1164,21 @@ function draw() {
       ctx.fillRect(p.x - 3, p.y - 5, 6, 5);
       setFont(10); ctx.fillStyle = '#ffb86b';
       ctx.fillText('SANDIK', p.x, p.y + 22);
+    } else if (p.kind === 'bed') {
+      // bed frame
+      ctx.fillStyle = '#5a3a18';
+      ctx.fillRect(p.x - 22, p.y - 14, 44, 28);
+      // mattress
+      ctx.fillStyle = '#d04060';
+      ctx.fillRect(p.x - 20, p.y - 12, 40, 22);
+      // pillow
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(p.x - 18, p.y - 10, 14, 12);
+      // blanket
+      ctx.fillStyle = '#6a4090';
+      ctx.fillRect(p.x - 2, p.y - 12, 22, 22);
+      setFont(10); ctx.fillStyle = '#d8a0c0';
+      ctx.fillText('YATAK', p.x, p.y + 22);
     } else {
       // table
       ctx.fillStyle = '#6a4520';
@@ -1138,6 +1247,39 @@ function draw() {
   for (var i = 0; i < bears.length; i++) ctx.fillText('🐻', bears[i].x, bears[i].y);
   for (var i = 0; i < bears.length; i++) hpBar(bears[i], 22);
 
+  // zombies
+  for (var i = 0; i < zombies.length; i++) {
+    var z = zombies[i];
+    // body
+    ctx.fillStyle = '#4a6a3a';
+    ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#3a5a2a';
+    ctx.beginPath(); ctx.arc(z.x, z.y + 3, z.r * 0.75, 0, Math.PI*2); ctx.fill();
+    // head
+    ctx.fillStyle = '#5a7a4a';
+    ctx.beginPath(); ctx.arc(z.x, z.y - z.r + 4, 8, 0, Math.PI*2); ctx.fill();
+    // eyes (red)
+    ctx.fillStyle = '#ff3030';
+    ctx.fillRect(z.x - 3, z.y - z.r + 2, 2, 2);
+    ctx.fillRect(z.x + 1, z.y - z.r + 2, 2, 2);
+    // arms outstretched
+    ctx.strokeStyle = '#3a5a2a'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    var a = Math.atan2(player.y - z.y, player.x - z.x);
+    ctx.beginPath();
+    ctx.moveTo(z.x, z.y - 2);
+    ctx.lineTo(z.x + Math.cos(a)*16, z.y + Math.sin(a)*16 - 2);
+    ctx.stroke();
+    hpBar(z, 16);
+    // burning effect
+    var phaseDraw = dayT / 90;
+    if (phaseDraw < 0.7) {
+      ctx.fillStyle = 'rgba(255,120,30,' + (0.5 + Math.sin(t*10)*0.3) + ')';
+      ctx.beginPath(); ctx.arc(z.x, z.y - z.r, 6, 0, Math.PI*2); ctx.fill();
+    }
+    setFont(10); ctx.fillStyle = '#9aff7a';
+    ctx.fillText('ZOMBİ', z.x, z.y + z.r + 12);
+  }
+
   // PLAYER — glow + emoji + name
   var pulse = (Math.sin(t*4)+1)/2;
   ctx.fillStyle = 'rgba(120, 200, 255, ' + (0.3 + pulse*0.2) + ')';
@@ -1171,6 +1313,19 @@ function draw() {
   }
   ctx.globalAlpha = 1;
 
+  // fog of war overlay (still in world-translated coords)
+  ctx.fillStyle = '#000';
+  var cellX0 = Math.max(0, Math.floor(view.x / FOG_CELL));
+  var cellY0 = Math.max(0, Math.floor(view.y / FOG_CELL));
+  var cellX1 = Math.min(FOG_W, Math.ceil((view.x + W) / FOG_CELL));
+  var cellY1 = Math.min(FOG_H, Math.ceil((view.y + H) / FOG_CELL));
+  for (var cy = cellY0; cy < cellY1; cy++) {
+    for (var cx = cellX0; cx < cellX1; cx++) {
+      if (fog[cy * FOG_W + cx] === 0) {
+        ctx.fillRect(cx * FOG_CELL, cy * FOG_CELL, FOG_CELL, FOG_CELL);
+      }
+    }
+  }
   ctx.restore();
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 
@@ -1183,25 +1338,49 @@ function draw() {
     ctx.fillRect(0, 0, W, H);
   }
 
-  // minimap
+  // minimap with fog
   drawMinimap();
 }
 
 function drawMinimap() {
-  // since whole world is already visible, minimap is small
-  var size = 100, pad = 10;
+  var size = 180, pad = 10;
   var ratio = WORLD_H / WORLD_W;
   var mw = size, mh = size * ratio;
   var mx = W - mw - pad, my = pad + 50;
-  ctx.fillStyle = 'rgba(0,0,0,0.8)';
+  ctx.fillStyle = 'rgba(0,0,0,0.95)';
   ctx.fillRect(mx, my, mw, mh);
   ctx.strokeStyle = '#444'; ctx.lineWidth = 1;
   ctx.strokeRect(mx + 0.5, my + 0.5, mw, mh);
+  // draw revealed cells only
   var sx = mw / WORLD_W, sy = mh / WORLD_H;
-  ctx.fillStyle = '#ff8030';
-  ctx.fillRect(mx + campfire.x*sx - 1.5, my + campfire.y*sy - 1.5, 3, 3);
+  ctx.fillStyle = '#243d22';
+  for (var cy = 0; cy < FOG_H; cy++) {
+    for (var cx = 0; cx < FOG_W; cx++) {
+      if (fog[cy * FOG_W + cx] === 1) {
+        ctx.fillRect(mx + cx * FOG_CELL * sx, my + cy * FOG_CELL * sy,
+                     FOG_CELL * sx + 0.5, FOG_CELL * sy + 0.5);
+      }
+    }
+  }
+  // entities only on revealed cells
+  function dot(e, col, sz) {
+    if (!isRevealed(e.x, e.y)) return;
+    ctx.fillStyle = col;
+    ctx.fillRect(mx + e.x * sx - sz/2, my + e.y * sy - sz/2, sz, sz);
+  }
+  if (isRevealed(campfire.x, campfire.y)) {
+    ctx.fillStyle = '#ff8030';
+    ctx.fillRect(mx + campfire.x*sx - 2, my + campfire.y*sy - 2, 4, 4);
+  }
+  for (var i = 0; i < zombies.length; i++) dot(zombies[i], '#6dd07a', 2);
+  for (var i = 0; i < wolves.length; i++) dot(wolves[i], '#888', 2);
+  for (var i = 0; i < bears.length; i++) dot(bears[i], '#5a3018', 3);
+  for (var i = 0; i < buildings.length; i++) dot(buildings[i], '#aaa', 2);
+  for (var i = 0; i < placed.length; i++) dot(placed[i], '#ffb86b', 2);
+  // player always visible
   ctx.fillStyle = '#4a9ee0';
-  ctx.beginPath(); ctx.arc(mx + player.x*sx, my + player.y*sy, 2.5, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(mx + player.x*sx, my + player.y*sy, 3, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke();
 }
 
 function hpBar(e, w) {
