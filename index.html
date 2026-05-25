@@ -262,6 +262,7 @@
 <audio id="bgmGame"  src="assets/overworld.mp3" loop preload="auto"></audio>
 <audio id="sfxHit"   src="assets/hit.mp3" preload="auto"></audio>
 <audio id="sfxCraft" src="assets/craft.mp3" preload="auto"></audio>
+<audio id="sfxHurt"  src="assets/hurt.mp3" preload="auto"></audio>
 <button id="muteBtn" onclick="window.__toggleMute()" title="Sesi aç/kapa">🔊</button>
 
 <!-- Start-screen settings (sound only) -->
@@ -1157,6 +1158,7 @@ function aiHunter(p, dt) {
     p.aT -= dt;
     if (dp < p.r + player.r + 4 && p.aT <= 0 && !pSafe) {
       player.hp -= p.dmg * diff.dmgMult; player.dmgCool = .25;
+      if (window.__sfxHurt) window.__sfxHurt();
       burst(player.x, player.y, '#e15a5a', 6);
       p.aT = 1.0;
     }
@@ -1987,12 +1989,13 @@ var bgmTitle = document.getElementById('bgmTitle');
 var bgmGame  = document.getElementById('bgmGame');
 var sfxHit   = document.getElementById('sfxHit');
 var sfxCraft = document.getElementById('sfxCraft');
+var sfxHurt  = document.getElementById('sfxHurt');
 var musicVol = 0.35, sfxVol = 0.70;
 bgmTitle.volume = musicVol; bgmGame.volume = musicVol;
-sfxHit.volume = sfxVol; sfxCraft.volume = sfxVol;
+sfxHit.volume = sfxVol; sfxCraft.volume = sfxVol; sfxHurt.volume = sfxVol;
 function applyVolumes() {
   bgmTitle.volume = musicVol; bgmGame.volume = musicVol;
-  sfxHit.volume = sfxVol; sfxCraft.volume = sfxVol;
+  sfxHit.volume = sfxVol; sfxCraft.volume = sfxVol; sfxHurt.volume = sfxVol;
 }
 function playSfx(audio) {
   if (muted) return;
@@ -2000,6 +2003,7 @@ function playSfx(audio) {
 }
 window.__sfxHit   = function(){ playSfx(sfxHit); };
 window.__sfxCraft = function(){ playSfx(sfxCraft); };
+window.__sfxHurt  = function(){ playSfx(sfxHurt); };
 var muted = false, audioErr = false;
 var currentBgm = bgmTitle; // which track should be playing right now
 [bgmTitle, bgmGame].forEach(function(a){
