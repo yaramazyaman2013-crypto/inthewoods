@@ -238,6 +238,25 @@
   #fishProgress { width: 240px; height: 10px; background: #1a1a1a; border: 1px solid #444; margin: 0 auto; border-radius: 5px; overflow: hidden; }
   #fishProgress > div { height: 100%; background: linear-gradient(90deg, #4ad06a, #6dff8a); width: 0%; transition: width .1s; }
   #fishLabel { font-size: 11px; color: #aaa; margin-top: 6px; }
+  #merchantUI {
+    position: absolute; top: 60px; left: 50%; transform: translateX(-50%);
+    background: #1a1410; border: 2px solid #ffd060; border-radius: 8px;
+    padding: 16px 20px; min-width: 480px; z-index: 80;
+    display: none; box-shadow: 0 6px 30px rgba(0,0,0,.8);
+  }
+  #merchantUI.open { display: block; }
+  #merchantUI h3 { margin: 0 0 6px; color: #ffd060; font-size: 14px; }
+  #merchantUI .close { position: absolute; top: 6px; right: 8px; background: transparent; border: 0; color: #888; font-size: 18px; cursor: pointer; }
+  #merchantUI .trade {
+    display: flex; align-items: center; justify-content: space-between;
+    background: #2a2014; border: 1px solid #4a3818; padding: 6px 10px; border-radius: 4px;
+    margin-bottom: 4px; font-size: 12px; color: #ccc;
+  }
+  #merchantUI .trade button {
+    background: #ffd060; color: #1a1410; border: 0; padding: 3px 10px;
+    border-radius: 3px; cursor: pointer; font-weight: 700; font-size: 11px;
+  }
+  #merchantUI .trade button:disabled { background: #444; color: #777; cursor: not-allowed; }
   #chestUI {
     position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
     background: #1a1a1a; border: 2px solid #ffb86b; border-radius: 8px;
@@ -404,6 +423,22 @@
       <div id="fishProgress"><div></div></div>
       <div id="fishLabel">Beyazı yeşilde tut — basılı tut yukarı, bırak aşağı</div>
     </div>
+    <div id="merchantUI">
+      <button class="close" onclick="window.__closeMerchant()">✕</button>
+      <h3>🧙 TÜCCAR</h3>
+      <div style="font-size:11px;color:#999;margin-bottom:8px">Altın (🪙) ile satın al veya eşya karşılığı sat. ESC kapat.</div>
+      <div style="display:flex;gap:14px;align-items:flex-start">
+        <div style="flex:1">
+          <div style="font-size:10px;color:#ffd060;margin-bottom:4px">SATILIK</div>
+          <div id="m_shop"></div>
+        </div>
+        <div style="flex:1">
+          <div style="font-size:10px;color:#6dd07a;margin-bottom:4px">SATIN ALINIR</div>
+          <div id="m_buy"></div>
+        </div>
+      </div>
+      <div style="margin-top:8px;font-size:11px;color:#ffd060">Cebinde: <span id="m_gold">0</span> 🪙</div>
+    </div>
     <div id="chestUI">
       <button class="close" onclick="window.__closeChest()">✕</button>
       <h3>📦 SANDIK</h3>
@@ -491,8 +526,11 @@ function showMsg(t) {
 var ITEMS = {
   stone:       { name:'Taş',         icon:'🪨' },
   wood:        { name:'Odun',        icon:'🪵' },
+  iron_raw:    { name:'Ham Demir',   icon:'🟫' },
+  gold_raw:    { name:'Ham Altın',   icon:'🟨' },
   iron:        { name:'Demir',       icon:'🔩' },
   gold:        { name:'Altın',       icon:'🪙' },
+  coal:        { name:'Kömür',       icon:'⬛' },
   meat_raw:    { name:'Çiğ Et',      icon:'🥩' },
   meat_cooked: { name:'Pişmiş Et',   icon:'🍖' },
   fish_raw:    { name:'Çiğ Balık',   icon:'🐟' },
@@ -508,10 +546,21 @@ var ITEMS = {
   arrow:       { name:'Ok',          icon:'➹'  },
   shears:      { name:'Makas',       icon:'✂'  },
   rod:         { name:'Olta',        icon:'🎣' },
+  hoe:         { name:'Çapa',        icon:'⚒'  },
+  bucket:      { name:'Kova',        icon:'🪣' },
+  bucket_water:{ name:'Su Kovası',   icon:'💧' },
+  torch:       { name:'Meşale',      icon:'🕯' },
   sapling:     { name:'Fidan',       icon:'🌱' },
   chest:       { name:'Sandık',      icon:'📦' },
   bed:         { name:'Yatak',       icon:'🛏' },
-  table:       { name:'Çal. Masası', icon:'🔨' }
+  table:       { name:'Çal. Masası', icon:'🔨' },
+  furnace:     { name:'Fırın',       icon:'🔥' },
+  seed_potato: { name:'Patates Tohumu', icon:'🥔' },
+  seed_carrot: { name:'Havuç Tohumu',   icon:'🥕' },
+  seed_wheat:  { name:'Buğday Tohumu',  icon:'🌾' },
+  potato:      { name:'Patates',     icon:'🥔' },
+  carrot:      { name:'Havuç',       icon:'🥕' },
+  wheat:       { name:'Buğday',      icon:'🌾' }
 };
 
 // difficulty config (applied on game start)
@@ -535,8 +584,11 @@ var player = {
 var campfire = { x: WORLD_W/2, y: WORLD_H/2, r: 18, light: 170 };
 var trees = [], stones = [], rabbits = [], wolves = [], bears = [], zombies = [], chickens = [], sheeps = [];
 var projectiles = []; // thrown spears
-var ironOres = [], goldOres = [];
+var ironOres = [], goldOres = [], coalOres = [];
+var grasses = [];
 var buildings = [], drops = [], placed = [], dens = [], particles = [], lakes = [];
+var merchant = null; // { x, y, leaveT, nextVisitDay }
+var nextMerchantDay = 3;
 var invFullWarned = false;
 
 // day/night cycle
@@ -581,6 +633,13 @@ function inLake(x, y, pad) {
   return false;
 }
 function buildWorld() {
+  // reset all world arrays so OYNA after a previous run starts fresh
+  trees.length = stones.length = rabbits.length = wolves.length = bears.length = 0;
+  zombies.length = chickens.length = sheeps.length = 0;
+  ironOres.length = goldOres.length = coalOres.length = grasses.length = 0;
+  buildings.length = drops.length = placed.length = dens.length = lakes.length = projectiles.length = 0;
+  merchant = null; nextMerchantDay = 3;
+  fog = new Uint8Array(FOG_W * FOG_H);
   // lakes FIRST so everything else can avoid them
   for (var i = 0; i < 2; i++) {
     var p, t = 0;
@@ -619,6 +678,20 @@ function buildWorld() {
     while ((dist(p, campfire) < 260 || inLake(p.x, p.y, 16)) && t < 30);
     if (inLake(p.x, p.y, 16)) continue;
     goldOres.push({ x:p.x, y:p.y, hp:6, hpMax:6, r:16 });
+  }
+  // coal ore
+  for (var i = 0; i < 15; i++) {
+    var p, t = 0;
+    do { p = { x: rand(60, WORLD_W-60), y: rand(60, WORLD_H-60) }; t++; }
+    while ((dist(p, campfire) < 150 || inLake(p.x, p.y, 14)) && t < 30);
+    if (inLake(p.x, p.y, 14)) continue;
+    coalOres.push({ x:p.x, y:p.y, hp:4, hpMax:4, r:14 });
+  }
+  // grass tufts (scattered, break for seeds)
+  for (var i = 0; i < 80; i++) {
+    var p = { x: rand(40, WORLD_W-40), y: rand(40, WORLD_H-40) };
+    if (inLake(p.x, p.y, 8)) continue;
+    grasses.push({ x:p.x, y:p.y, r:10 });
   }
   // structures — variety: ruin, plane wreck, lake
   var structKinds = ['ruin', 'plane', 'ruin', 'plane', 'ruin', 'campsite'];
@@ -733,8 +806,15 @@ var RECIPES = [
   { id:'pickaxe', name:'Kazma',          cost:{iron:2, wood:2},               needTable:true },
   { id:'sword',   name:'Demir Kılıç',    cost:{iron:3, wood:1},               needTable:true },
   { id:'shears',  name:'Makas',          cost:{iron:2, wood:1},               needTable:true },
+  { id:'hoe',     name:'Çapa',           cost:{iron:1, wood:2},               needTable:true },
+  { id:'bucket',  name:'Kova',           cost:{iron:5},                       needTable:true },
+  { id:'torch',   name:'Meşale x2',      cost:{wood:1, coal:1},               needTable:true, qty:2 },
   { id:'chest',   name:'Sandık',         cost:{wood:6, iron:1},               needTable:true, place:true },
-  { id:'bed',     name:'Yatak',          cost:{wood:6, feather:3, wool:2},    needTable:true, place:true }
+  { id:'bed',     name:'Yatak',          cost:{wood:6, feather:3, wool:2},    needTable:true, place:true },
+  { id:'furnace', name:'Fırın',          cost:{stone:10, iron_raw:3, coal:10},needTable:true, place:true },
+  // smelting (needs furnace nearby)
+  { id:'iron',    name:'Demir (eritim)', cost:{iron_raw:1, coal:1},           needFurnace:true },
+  { id:'gold',    name:'Altın (eritim)', cost:{gold_raw:1, coal:1},           needFurnace:true }
 ];
 
 function renderCraft() {
@@ -749,11 +829,14 @@ function renderCraft() {
       if (!have) has = false;
       costs += '<span style="color:' + (have?'#6dd07a':'#e15a5a') + '">' + ITEMS[k].icon + r.cost[k] + '</span> ';
     }
-    var near = !r.needTable || hasTableNear();
-    var ok = has && near;
+    var nearTable   = !r.needTable   || hasTableNear();
+    var nearFurnace = !r.needFurnace || hasFurnaceNear();
+    var ok = has && nearTable && nearFurnace;
     html += '<div class="recipe' + (ok ? '' : ' off') + '" data-r="' + i + '">' +
       '<div class="ri">' + ITEMS[r.id].icon + '</div><div class="rb"><div class="rn">' + r.name +
-      '</div><div class="rc">' + costs + (r.needTable?'<span style="color:#999">📍masa</span>':'') +
+      '</div><div class="rc">' + costs +
+        (r.needTable?'<span style="color:#999">📍masa</span>':'') +
+        (r.needFurnace?'<span style="color:#999">🔥fırın</span>':'') +
       '</div></div></div>';
   }
   el.innerHTML = html;
@@ -770,6 +853,11 @@ document.getElementById('craft').addEventListener('click', function(e) {
 function hasTableNear() {
   for (var i = 0; i < placed.length; i++)
     if (placed[i].kind === 'table' && dist(placed[i], player) < 70) return true;
+  return false;
+}
+function hasFurnaceNear() {
+  for (var i = 0; i < placed.length; i++)
+    if (placed[i].kind === 'furnace' && dist(placed[i], player) < 70) return true;
   return false;
 }
 function craft(r) {
@@ -809,6 +897,8 @@ cv.addEventListener('mousedown', function(e) {
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
     closeChest();
+    var mu = document.getElementById('merchantUI');
+    if (mu && mu.classList.contains('open')) { mu.classList.remove('open'); return; }
     if (gameStarted) toggleSettingsGame();
     return;
   }
@@ -836,6 +926,71 @@ function dropSelected() {
   });
   showMsg('🗑 ' + ITEMS[id].name + ' bırakıldı');
 }
+
+// merchant UI
+var MERCHANT_SHOP = [
+  { id:'meat_cooked', price:2 },
+  { id:'sword',       price:8 },
+  { id:'iron',        price:3 },
+  { id:'arrow',       price:1, qty:3 },
+  { id:'bucket',      price:5 },
+  { id:'hoe',         price:4 },
+  { id:'seed_potato', price:1 },
+  { id:'seed_carrot', price:1 },
+  { id:'seed_wheat',  price:1 }
+];
+var MERCHANT_BUYS = [
+  { id:'iron',     price:2 },
+  { id:'wool',     price:1 },
+  { id:'wheat',    price:1 },
+  { id:'meat_raw', price:1 }
+];
+function openMerchantUI() {
+  if (!merchant) return;
+  document.getElementById('merchantUI').classList.add('open');
+  renderMerchantUI();
+}
+function renderMerchantUI() {
+  var shop = document.getElementById('m_shop');
+  var buy  = document.getElementById('m_buy');
+  shop.innerHTML = ''; buy.innerHTML = '';
+  var gold = countItem('gold');
+  document.getElementById('m_gold').textContent = gold;
+  MERCHANT_SHOP.forEach(function(it) {
+    var div = document.createElement('div'); div.className = 'trade';
+    var q = it.qty || 1;
+    div.innerHTML = '<span>' + ITEMS[it.id].icon + ' ' + ITEMS[it.id].name + (q>1?' x'+q:'') + '</span>' +
+                    '<span>' + it.price + '🪙 <button data-buy="' + it.id + '">AL</button></span>';
+    var btn = div.querySelector('button');
+    btn.disabled = gold < it.price;
+    btn.onclick = function() {
+      if (countItem('gold') < it.price) return;
+      removeItem('gold', it.price);
+      if (!addItem(it.id, q)) { addItem('gold', it.price); showMsg('⚠ Envanter dolu'); return; }
+      if (window.__sfxCraft) window.__sfxCraft();
+      renderMerchantUI();
+    };
+    shop.appendChild(div);
+  });
+  MERCHANT_BUYS.forEach(function(it) {
+    var have = countItem(it.id);
+    var div = document.createElement('div'); div.className = 'trade';
+    div.innerHTML = '<span>' + ITEMS[it.id].icon + ' ' + ITEMS[it.id].name + ' <span style="color:#777">(' + have + ')</span></span>' +
+                    '<span>' + it.price + '🪙 <button data-sell="' + it.id + '">SAT</button></span>';
+    var btn = div.querySelector('button');
+    btn.disabled = have < 1;
+    btn.onclick = function() {
+      if (countItem(it.id) < 1) return;
+      removeItem(it.id, 1); addItem('gold', it.price);
+      if (window.__sfxCraft) window.__sfxCraft();
+      renderMerchantUI();
+    };
+    buy.appendChild(div);
+  });
+}
+window.__closeMerchant = function() {
+  document.getElementById('merchantUI').classList.remove('open');
+};
 
 // chest UI
 var openChest = null;
@@ -905,7 +1060,10 @@ var FOOD = {
   meat_cooked: { hu: 35, hp: 10, msg: '🍖 Doydun (+35, +10)' },
   fish_cooked: { hu: 28, hp: 8,  msg: '🍣 Doydun (+28, +8)'  },
   meat_raw:    { hu: 15, hp: -5, msg: '🥩 Çiğ yedin (+15, -5)' },
-  fish_raw:    { hu: 12, hp: -3, msg: '🐟 Çiğ balık (+12, -3)' }
+  fish_raw:    { hu: 12, hp: -3, msg: '🐟 Çiğ balık (+12, -3)' },
+  potato:      { hu: 18, hp: 0,  msg: '🥔 Patates (+18)' },
+  carrot:      { hu: 14, hp: 2,  msg: '🥕 Havuç (+14, +2)' },
+  wheat:       { hu: 10, hp: 0,  msg: '🌾 Buğday (+10)' }
 };
 function eatItem(id) {
   if (!FOOD[id] || countItem(id) < 1) return false;
@@ -938,6 +1096,58 @@ function interact(wp) {
     }
   }
   var tool0 = getTool();
+  // bucket: fill at lake / place water
+  if (tool0 === 'bucket') {
+    // near a lake? fill it
+    for (var i = 0; i < lakes.length; i++) {
+      var L = lakes[i];
+      var dx = (player.x - L.x) / L.rx, dy = (player.y - L.y) / L.ry;
+      if (dx*dx + dy*dy < 1.6) {
+        removeItem('bucket', 1); addItem('bucket_water', 1);
+        showMsg('💧 Kovayı doldurdun'); return;
+      }
+    }
+    showMsg('💧 Yakında göl yok'); return;
+  }
+  if (tool0 === 'bucket_water') {
+    // near farmland? water it
+    for (var i = 0; i < placed.length; i++) {
+      if (placed[i].kind === 'farmland' && dist(placed[i], wp) < 30 && dist(placed[i], player) < 60) {
+        placed[i].watered = true;
+        removeItem('bucket_water', 1); addItem('bucket', 1);
+        showMsg('💧 Sulandı (büyüme 2x)'); return;
+      }
+    }
+    // otherwise place a small water tile at click
+    if (dist(wp, player) < 60) {
+      placed.push({ kind:'water', x: wp.x, y: wp.y, r: 22 });
+      removeItem('bucket_water', 1); addItem('bucket', 1);
+      showMsg('💧 Su bırakıldı'); return;
+    }
+    return;
+  }
+  // hoe: till grass / empty ground → farmland
+  if (tool0 === 'hoe') {
+    if (dist(wp, player) > 60) return;
+    if (inLake(wp.x, wp.y, 0)) { showMsg('⚒ Burada toprak yok'); return; }
+    // don't till on existing placed
+    for (var i = 0; i < placed.length; i++) if (dist(placed[i], wp) < 28) return;
+    // consume nearby grass if any
+    for (var i = grasses.length - 1; i >= 0; i--) {
+      if (dist(grasses[i], wp) < 18) { grasses.splice(i, 1); break; }
+    }
+    placed.push({ kind:'farmland', x: wp.x, y: wp.y, r: 18, crop: null, growth: 0, watered: false });
+    player.hitCool = 0.3;
+    if (window.__sfxHit) window.__sfxHit();
+    return;
+  }
+  // torch placement
+  if (tool0 === 'torch') {
+    if (dist(wp, player) > 60) return;
+    placed.push({ kind:'torch', x: wp.x, y: wp.y, r: 8 });
+    removeItem('torch', 1);
+    return;
+  }
   // spear throw — ranged, heavy
   if (tool0 === 'spear') {
     if (!removeItem('spear', 1)) return;
@@ -1006,7 +1216,18 @@ function interact(wp) {
   check(trees,'tree'); check(stones,'stone'); check(rabbits,'rabbit');
   check(chickens,'chicken'); check(sheeps,'sheep');
   check(wolves,'wolf'); check(bears,'bear'); check(buildings,'bldg');
-  check(ironOres,'iron'); check(goldOres,'gold');
+  check(ironOres,'iron'); check(goldOres,'gold'); check(coalOres,'coal');
+  check(grasses,'grass');
+  // farmland: check placed
+  for (var i = 0; i < placed.length; i++) {
+    if (placed[i].kind === 'farmland') {
+      var d = dist(placed[i], wp);
+      if (d < bestD && dist(placed[i], player) < 60) { best = placed[i]; bestType = 'farmland'; bestD = d; }
+    }
+  }
+  if (merchant && dist(merchant, wp) < 40 && dist(merchant, player) < 70) {
+    best = merchant; bestType = 'merchant'; bestD = 0;
+  }
   check(zombies,'zombie');
   if (!best) return;
   player.hitCool = 0.35;
@@ -1041,7 +1262,7 @@ function interact(wp) {
     best.hp -= dmg;
     burst(best.x, best.y, '#b08060', 4);
     if (best.hp <= 0) {
-      drops.push({x:best.x, y:best.y, id:'iron', qty:2});
+      drops.push({x:best.x, y:best.y, id:'iron_raw', qty:2});
       ironOres.splice(ironOres.indexOf(best), 1);
     }
   } else if (bestType === 'gold') {
@@ -1051,9 +1272,46 @@ function interact(wp) {
     best.hp -= 1;
     burst(best.x, best.y, '#ffd040', 5);
     if (best.hp <= 0) {
-      drops.push({x:best.x, y:best.y, id:'gold', qty:1});
+      drops.push({x:best.x, y:best.y, id:'gold_raw', qty:1});
       goldOres.splice(goldOres.indexOf(best), 1);
     }
+  } else if (bestType === 'coal') {
+    if (tool !== 'axe' && tool !== 'pickaxe' && tool !== 'sword') {
+      showMsg('⛏ Kömür için balta veya kazma lazım'); return;
+    }
+    var dmg = tool === 'pickaxe' ? 2 : 1;
+    best.hp -= dmg;
+    burst(best.x, best.y, '#222', 4);
+    if (best.hp <= 0) {
+      drops.push({x:best.x, y:best.y, id:'coal', qty:2});
+      coalOres.splice(coalOres.indexOf(best), 1);
+    }
+  } else if (bestType === 'grass') {
+    grasses.splice(grasses.indexOf(best), 1);
+    burst(best.x, best.y, '#6dd07a', 4);
+    if (Math.random() < 0.35) {
+      var seeds = ['seed_potato', 'seed_carrot', 'seed_wheat'];
+      var seed = seeds[Math.floor(Math.random() * seeds.length)];
+      drops.push({x:best.x, y:best.y, id:seed, qty:1});
+    }
+  } else if (bestType === 'farmland') {
+    // plant a seed if selected
+    var sel = player.inv[player.sel];
+    if (sel && (sel.id === 'seed_potato' || sel.id === 'seed_carrot' || sel.id === 'seed_wheat') && !best.crop) {
+      removeItem(sel.id, 1);
+      best.crop = sel.id.replace('seed_', '');
+      best.growth = 0;
+      best.watered = best.watered || false;
+      showMsg('🌱 ' + ITEMS[sel.id].name + ' ekildi');
+    } else if (best.crop && best.growth >= 1) {
+      // harvest
+      drops.push({x:best.x, y:best.y, id:best.crop, qty:1 + (Math.random()<0.4?1:0)});
+      drops.push({x:best.x, y:best.y, id:'seed_' + best.crop, qty:1});
+      best.crop = null; best.growth = 0; best.watered = false;
+      showMsg('🌾 Hasat!');
+    }
+  } else if (bestType === 'merchant') {
+    openMerchantUI();
   } else if (bestType === 'chicken') {
     var dmg = tool === 'knife' ? 3 : tool === 'axe' ? 2 : 1;
     best.hp -= dmg; best.fT = 4;
@@ -1386,6 +1644,26 @@ function update(dt) {
   // day timer (1 day = 90 seconds)
   dayT += dt;
   if (dayT >= DAY_LEN) { dayT = 0; day++; }
+  // crops grow over time (placed farmland w/ crop) — full growth ~90s, half if not watered
+  for (var ic = 0; ic < placed.length; ic++) {
+    var pc = placed[ic];
+    if (pc.kind === 'farmland' && pc.crop && pc.growth < 1) {
+      pc.growth = Math.min(1, pc.growth + dt * (pc.watered ? 0.022 : 0.011));
+    }
+  }
+  // merchant: spawns at campfire on nextMerchantDay, stays 90s
+  if (!merchant && day >= nextMerchantDay) {
+    merchant = { x: campfire.x + 50, y: campfire.y - 10, r: 14, leaveT: 90 };
+    showMsg('🧙 Tüccar kamp ateşine geldi!');
+  }
+  if (merchant) {
+    merchant.leaveT -= dt;
+    if (merchant.leaveT <= 0) {
+      merchant = null;
+      nextMerchantDay = day + (2 + Math.floor(Math.random() * 2));
+      if (document.getElementById('merchantUI')) document.getElementById('merchantUI').classList.remove('open');
+    }
+  }
   var dayEl = document.getElementById('day');
   var phase = dayT / DAY_LEN;
   var isDay = phase < 0.7;
@@ -1609,6 +1887,36 @@ function draw() {
     ctx.fillText('DEMİR', o.x, o.y + o.r + 8);
     if (o.hp < o.hpMax) hpBar(o, 16);
   }
+  // grass tufts
+  for (var i = 0; i < grasses.length; i++) {
+    var g = grasses[i];
+    setFont(18); ctx.fillText('🌿', g.x, g.y);
+  }
+  // merchant
+  if (merchant) {
+    setFont(34); ctx.fillText('🧙', merchant.x, merchant.y);
+    setFont(10); ctx.fillStyle = '#ffd060';
+    ctx.fillText('TÜCCAR (sağ tık)', merchant.x, merchant.y + 24);
+    // leaving timer
+    var pct = Math.max(0, merchant.leaveT) / 90;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(merchant.x - 20, merchant.y - 28, 40, 4);
+    ctx.fillStyle = '#ffd060';
+    ctx.fillRect(merchant.x - 19.5, merchant.y - 27.5, 39 * pct, 3);
+  }
+  // coal ore
+  for (var i = 0; i < coalOres.length; i++) {
+    var o = coalOres[i];
+    ctx.fillStyle = '#2a2a2a';
+    ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.arc(o.x - 3, o.y - 3, o.r * 0.55, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#444';
+    ctx.beginPath(); ctx.arc(o.x + 4, o.y + 2, 4, 0, Math.PI*2); ctx.fill();
+    setFont(10); ctx.fillStyle = '#888';
+    ctx.fillText('KÖMÜR', o.x, o.y + o.r + 8);
+    if (o.hp < o.hpMax) hpBar(o, 16);
+  }
   // gold ore
   for (var i = 0; i < goldOres.length; i++) {
     var o = goldOres[i];
@@ -1660,20 +1968,71 @@ function draw() {
       ctx.fillRect(p.x - 2, p.y - 12, 22, 22);
       setFont(10); ctx.fillStyle = '#d8a0c0';
       ctx.fillText('YATAK', p.x, p.y + 22);
-    } else {
-      // table
+    } else if (p.kind === 'table') {
       ctx.fillStyle = '#6a4520';
       ctx.fillRect(p.x - 18, p.y - 12, 36, 8);
       ctx.fillStyle = '#4a2f18';
       ctx.fillRect(p.x - 16, p.y - 4, 4, 14);
       ctx.fillRect(p.x + 12, p.y - 4, 4, 14);
-      // tools on top
       ctx.fillStyle = '#aaa';
       ctx.fillRect(p.x - 8, p.y - 14, 4, 4);
       ctx.fillStyle = '#8a5a20';
       ctx.fillRect(p.x + 4, p.y - 14, 4, 4);
       setFont(10); ctx.fillStyle = '#aaa';
       ctx.fillText('MASA', p.x, p.y + 22);
+    } else if (p.kind === 'furnace') {
+      // stone body
+      ctx.fillStyle = '#4a4a4a';
+      ctx.fillRect(p.x - 18, p.y - 18, 36, 36);
+      ctx.fillStyle = '#2a2a2a';
+      ctx.fillRect(p.x - 12, p.y - 4, 24, 18);
+      // fire
+      var f = 0.7 + Math.sin(t*8) * 0.3;
+      ctx.fillStyle = 'rgba(255,150,40,' + f + ')';
+      ctx.fillRect(p.x - 10, p.y - 2, 20, 14);
+      ctx.fillStyle = 'rgba(255,220,80,' + f + ')';
+      ctx.fillRect(p.x - 6, p.y + 2, 12, 8);
+      setFont(10); ctx.fillStyle = '#ffb86b';
+      ctx.fillText('FIRIN', p.x, p.y + 28);
+    } else if (p.kind === 'torch') {
+      // stick
+      ctx.fillStyle = '#5a3a18';
+      ctx.fillRect(p.x - 1.5, p.y - 4, 3, 14);
+      // flame
+      var fs = 5 + Math.sin(t*10 + p.x) * 1.5;
+      ctx.fillStyle = '#ff8030';
+      ctx.beginPath(); ctx.arc(p.x, p.y - 6, fs, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#ffd060';
+      ctx.beginPath(); ctx.arc(p.x, p.y - 6, fs*0.5, 0, Math.PI*2); ctx.fill();
+    } else if (p.kind === 'farmland') {
+      // dirt patch
+      ctx.fillStyle = '#5a3818';
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, 18, 14, 0, 0, Math.PI*2); ctx.fill();
+      // furrows
+      ctx.strokeStyle = '#3a2010'; ctx.lineWidth = 1.5;
+      for (var ff = -1; ff <= 1; ff++) {
+        ctx.beginPath(); ctx.moveTo(p.x - 14, p.y + ff*5); ctx.lineTo(p.x + 14, p.y + ff*5); ctx.stroke();
+      }
+      if (p.watered) {
+        ctx.fillStyle = 'rgba(60,120,200,0.25)';
+        ctx.beginPath(); ctx.ellipse(p.x, p.y, 18, 14, 0, 0, Math.PI*2); ctx.fill();
+      }
+      if (p.crop) {
+        var icon = p.crop === 'potato' ? '🥔' : p.crop === 'carrot' ? '🥕' : '🌾';
+        var sz = 10 + Math.round(p.growth * 16);
+        setFont(sz); ctx.fillText(icon, p.x, p.y);
+        if (p.growth < 1) {
+          ctx.fillStyle = 'rgba(0,0,0,0.6)';
+          ctx.fillRect(p.x - 14, p.y - 18, 28, 3);
+          ctx.fillStyle = '#6dd07a';
+          ctx.fillRect(p.x - 13.5, p.y - 17.5, 27 * p.growth, 2);
+        }
+      }
+    } else if (p.kind === 'water') {
+      ctx.fillStyle = '#3a78c8';
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.beginPath(); ctx.arc(p.x - 4, p.y - 4, p.r * 0.4, 0, Math.PI*2); ctx.fill();
     }
   }
 
@@ -1869,6 +2228,20 @@ function draw() {
   if (darkness > 0) {
     ctx.fillStyle = 'rgba(10, 20, 50, ' + darkness + ')';
     ctx.fillRect(0, 0, W, H);
+    // punch holes for torches
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    for (var ti = 0; ti < placed.length; ti++) {
+      if (placed[ti].kind !== 'torch') continue;
+      var tx = placed[ti].x - view.x, ty = placed[ti].y - view.y;
+      if (tx < -80 || tx > W + 80 || ty < -80 || ty > H + 80) continue;
+      var grd = ctx.createRadialGradient(tx, ty, 4, tx, ty, 80);
+      grd.addColorStop(0, 'rgba(255,200,80,1)');
+      grd.addColorStop(1, 'rgba(255,200,80,0)');
+      ctx.fillStyle = grd;
+      ctx.beginPath(); ctx.arc(tx, ty, 80, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
   }
 
   // minimap with fog
@@ -2074,7 +2447,9 @@ window.__goBack = function() {
   // wipe state — fresh on next start
   trees.length = stones.length = rabbits.length = wolves.length = bears.length = 0;
   zombies.length = chickens.length = sheeps.length = ironOres.length = goldOres.length = 0;
+  coalOres.length = grasses.length = 0;
   buildings.length = drops.length = placed.length = dens.length = lakes.length = projectiles.length = 0;
+  merchant = null; nextMerchantDay = 3;
   fog = new Uint8Array(FOG_W * FOG_H);
   player.inv = [{ id: 'stone', qty: 1 }];
   player.hp = player.hpMax; player.hu = 100; player.en = 100;
@@ -2088,9 +2463,9 @@ window.__goBack = function() {
   document.getElementById('creditPanel').classList.remove('show');
 };
 // ---------- Save / Load ----------
-var SAVE_KEY = 'inthewoods.save.v2';
-// clear obsolete v1 saves so the "DEVAM ET" button doesn't appear on first load
-try { localStorage.removeItem('inthewoods.save.v1'); } catch(e){}
+var SAVE_KEY = 'inthewoods.save.v3';
+// clear obsolete saves
+try { localStorage.removeItem('inthewoods.save.v1'); localStorage.removeItem('inthewoods.save.v2'); } catch(e){}
 function diffKey() {
   for (var k in DIFFS) if (DIFFS[k] === diff) return k;
   return 'normal';
@@ -2106,9 +2481,11 @@ function saveGame() {
       player: player,
       trees: trees, stones: stones, rabbits: rabbits, wolves: wolves,
       bears: bears, zombies: zombies, chickens: chickens, sheeps: sheeps,
-      ironOres: ironOres, goldOres: goldOres,
+      ironOres: ironOres, goldOres: goldOres, coalOres: coalOres,
+      grasses: grasses,
       buildings: buildings, drops: drops, placed: placed, dens: dens, lakes: lakes,
       campfire: campfire,
+      merchant: merchant, nextMerchantDay: nextMerchantDay,
       fog: Array.from(fog)
     };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -2128,9 +2505,11 @@ function loadGame() {
     Object.assign(player, d.player);
     trees = d.trees; stones = d.stones; rabbits = d.rabbits; wolves = d.wolves;
     bears = d.bears; zombies = d.zombies; chickens = d.chickens; sheeps = d.sheeps;
-    ironOres = d.ironOres; goldOres = d.goldOres;
+    ironOres = d.ironOres; goldOres = d.goldOres; coalOres = d.coalOres || [];
+    grasses = d.grasses || [];
     buildings = d.buildings; drops = d.drops; placed = d.placed;
     dens = d.dens; lakes = d.lakes;
+    merchant = d.merchant || null; nextMerchantDay = d.nextMerchantDay || 3;
     Object.assign(campfire, d.campfire);
     fog = new Uint8Array(d.fog);
     projectiles = []; particles = [];
