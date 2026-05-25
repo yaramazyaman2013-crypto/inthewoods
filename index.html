@@ -295,7 +295,8 @@
     </div>
     <div class="locked" id="hardcoreLock" style="display:none">🔒 HARDCORE — zorluk kilitli</div>
   </div>
-  <button class="closebtn" onclick="window.__closeSettings('game')">KAPAT</button>
+  <button class="closebtn" onclick="window.__closeSettings('game')">DEVAM ET</button>
+  <button class="closebtn" style="background:#7a3a3a" onclick="window.__backToMenu()">🏠 ANA MENÜYE DÖN</button>
 </div>
 <div id="gameover">
   <div class="skull">💀</div>
@@ -533,6 +534,7 @@ var trees = [], stones = [], rabbits = [], wolves = [], bears = [], zombies = []
 var projectiles = []; // thrown spears
 var ironOres = [], goldOres = [];
 var buildings = [], drops = [], placed = [], dens = [], particles = [], lakes = [];
+var invFullWarned = false;
 
 // day/night cycle
 var DAY_LEN = 240; // seconds for full day (night is last 30%)
@@ -651,10 +653,10 @@ function inSafe(e){ return dist(e, campfire) < campfire.light; }
 function addItem(id, qty) {
   qty = qty || 1;
   for (var i = 0; i < player.inv.length; i++) {
-    if (player.inv[i].id === id) { player.inv[i].qty += qty; renderInv(); return; }
+    if (player.inv[i].id === id) { player.inv[i].qty += qty; renderInv(); return true; }
   }
-  if (player.inv.length < 8) player.inv.push({ id:id, qty:qty });
-  renderInv();
+  if (player.inv.length < 8) { player.inv.push({ id:id, qty:qty }); renderInv(); return true; }
+  renderInv(); return false;
 }
 function removeItem(id, qty) {
   qty = qty || 1;
@@ -1343,7 +1345,8 @@ function update(dt) {
     if (dr.age === undefined) dr.age = 0;
     dr.age += dt;
     if (dist(dr, player) < player.r + 10) {
-      addItem(dr.id, dr.qty); drops.splice(i, 1); continue;
+      if (addItem(dr.id, dr.qty)) { drops.splice(i, 1); continue; }
+      else { if (!invFullWarned) { showMsg('⚠ Envanter dolu (8/8)'); invFullWarned = true; setTimeout(function(){ invFullWarned = false; }, 3000); } }
     }
     if (dr.age > 300) drops.splice(i, 1); // despawn after 5 minutes
   }
@@ -2114,6 +2117,14 @@ window.__menu = function(name) {
   document.getElementById('mainMenu').style.display = (name === 'main') ? 'flex' : 'none';
   document.getElementById('diffPanel').classList.toggle('show', name === 'play');
   document.getElementById('creditPanel').classList.toggle('show', name === 'credits');
+};
+window.__backToMenu = function() {
+  if (!confirm('Ana menüye dönülsün mü? (Kaydetmediysen ilerleme kaybolur)')) return;
+  document.getElementById('settingsGame').classList.remove('open');
+  gameStarted = false;
+  document.getElementById('start').classList.remove('hide');
+  window.__menu('main');
+  playTitleMusic();
 };
 window.__startGame = function(level) {
   diff = DIFFS[level] || DIFFS.normal;
