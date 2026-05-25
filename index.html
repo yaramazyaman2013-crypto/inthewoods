@@ -35,6 +35,8 @@
   .slot .qty { position: absolute; bottom: 1px; right: 3px; font-size: 10px; color: #ffb86b; font-weight: 700; }
   .slot .k { position: absolute; top: 1px; left: 3px; font-size: 9px; color: #666; }
   .slot .durbar { position: absolute; bottom: 0; left: 0; height: 3px; border-radius: 0 2px 2px 0; }
+  .slot.dragging { opacity: 0.4; }
+  .slot.dragover { outline: 2px dashed #ffb86b; outline-offset: -2px; }
   .recipe {
     display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: #1a1a1a;
     border: 1px solid #2a2a2a; border-radius: 5px; margin-bottom: 5px; cursor: pointer;
@@ -532,9 +534,9 @@ var ITEMS = {
   wood:        { name:'Odun',        icon:'🪵' },
   iron_raw:    { name:'Ham Demir',   icon:'🟫' },
   gold_raw:    { name:'Ham Altın',   icon:'🟨' },
-  iron:        { name:'Demir',       icon:'🔩' },
+  iron:        { name:'Demir',       icon:'⛓️' },
   gold:        { name:'Altın',       icon:'🪙' },
-  coal:        { name:'Kömür',       icon:'⬛' },
+  coal:        { name:'Kömür',       icon:'⚫' },
   meat_raw:    { name:'Çiğ Et',      icon:'🥩' },
   meat_cooked: { name:'Pişmiş Et',   icon:'🍖' },
   fish_raw:    { name:'Çiğ Balık',   icon:'🐟' },
@@ -749,37 +751,52 @@ function buildWorld() {
 function inSafe(e){ return dist(e, campfire) < campfire.light; }
 
 // ---------- Inventory ----------
+function _firstEmptySlot() {
+  // first null gap, or end-of-array up to 8
+  for (var i = 0; i < player.inv.length; i++) if (!player.inv[i]) return i;
+  if (player.inv.length < 8) return player.inv.length;
+  return -1;
+}
+function _countNonNull() {
+  var n = 0;
+  for (var i = 0; i < player.inv.length; i++) if (player.inv[i]) n++;
+  return n;
+}
 function addItem(id, qty) {
   qty = qty || 1;
   // tools don't stack — each pushed as its own slot with full durability
   if (TOOL_DUR && TOOL_DUR[id] !== undefined) {
+    var added = 0;
     for (var n = 0; n < qty; n++) {
-      if (player.inv.length >= 8) { renderInv(); return n > 0; }
-      player.inv.push({ id:id, qty:1, dur: TOOL_DUR[id] });
+      var slot = _firstEmptySlot();
+      if (slot < 0) break;
+      player.inv[slot] = { id:id, qty:1, dur: TOOL_DUR[id] };
+      added++;
     }
-    renderInv(); return true;
+    renderInv(); return added > 0;
   }
   for (var i = 0; i < player.inv.length; i++) {
-    if (player.inv[i].id === id) { player.inv[i].qty += qty; renderInv(); return true; }
+    if (player.inv[i] && player.inv[i].id === id) { player.inv[i].qty += qty; renderInv(); return true; }
   }
-  if (player.inv.length < 8) { player.inv.push({ id:id, qty:qty }); renderInv(); return true; }
+  var slot2 = _firstEmptySlot();
+  if (slot2 >= 0) { player.inv[slot2] = { id:id, qty:qty }; renderInv(); return true; }
   renderInv(); return false;
 }
 function removeItem(id, qty) {
   qty = qty || 1;
   for (var i = 0; i < player.inv.length; i++) {
-    if (player.inv[i].id === id) {
+    if (player.inv[i] && player.inv[i].id === id) {
       if (player.inv[i].qty < qty) return false;
       player.inv[i].qty -= qty;
-      if (player.inv[i].qty <= 0) player.inv.splice(i, 1);
-      if (player.sel >= player.inv.length) player.sel = Math.max(0, player.inv.length-1);
+      if (player.inv[i].qty <= 0) player.inv[i] = null;
+      // keep player.sel where it is (slot may now be null, that's fine — getTool guards)
       renderInv(); return true;
     }
   }
   return false;
 }
 function countItem(id) {
-  for (var i = 0; i < player.inv.length; i++) if (player.inv[i].id === id) return player.inv[i].qty;
+  for (var i = 0; i < player.inv.length; i++) if (player.inv[i] && player.inv[i].id === id) return player.inv[i].qty;
   return 0;
 }
 // give qty of id to player; if inventory is full, the overflow falls on the ground at (x,y) instead of vanishing.
@@ -832,6 +849,35 @@ function renderInv() {
     if (it) {
       d.title = ITEMS[it.id].name + (isTool(it.id) ? ' (' + (it.dur !== undefined ? it.dur : TOOL_DUR[it.id]) + '/' + TOOL_DUR[it.id] + ')' : '');
     }
+    d.dataset.idx = i;
+    // drag-and-drop reorder
+    if (it) d.draggable = true;
+    d.addEventListener('dragstart', function(e) {
+      e.dataTransfer.setData('text/plain', this.dataset.idx);
+      e.dataTransfer.effectAllowed = 'move';
+      this.classList.add('dragging');
+    });
+    d.addEventListener('dragend', function() { this.classList.remove('dragging'); });
+    d.addEventListener('dragover', function(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; this.classList.add('dragover'); });
+    d.addEventListener('dragleave', function() { this.classList.remove('dragover'); });
+    d.addEventListener('drop', function(e) {
+      e.preventDefault();
+      this.classList.remove('dragover');
+      var from = parseInt(e.dataTransfer.getData('text/plain'));
+      var to = parseInt(this.dataset.idx);
+      if (isNaN(from) || isNaN(to) || from === to) return;
+      // swap (or move into empty)
+      var src = player.inv[from], dst = player.inv[to];
+      // ensure inventory array is long enough
+      while (player.inv.length <= Math.max(from, to)) player.inv.push(null);
+      player.inv[from] = dst || null;
+      player.inv[to]   = src || null;
+      // collapse trailing nulls so length stays meaningful
+      while (player.inv.length && player.inv[player.inv.length-1] == null) player.inv.pop();
+      // remove any null gaps in the middle by re-mapping selection
+      // (we keep nulls in the middle since slots are positional 0..7)
+      renderInv();
+    });
     (function(idx){
       d.onclick = function(){
         var was = player.sel;
@@ -971,6 +1017,11 @@ document.addEventListener('keydown', function(e) {
     eatMeat();
   } else if (e.key === 'q' || e.key === 'Q') {
     dropSelected();
+  } else if (e.key === 'x' || e.key === 'X') {
+    // open merchant trade UI if the merchant is at the campfire
+    if (merchant && dist(merchant, player) < 90) openMerchantUI();
+    else if (merchant) showMsg('🧙 Tüccarın yanına git');
+    else showMsg('🧙 Tüccar yok');
   }
 });
 
@@ -1090,16 +1141,24 @@ function renderChestUI() {
       if (!inv[idx]) return;
       var item = inv[idx];
       var target = isChest ? player.inv : openChest.inv;
-      // try stack
-      for (var i = 0; i < target.length; i++) {
-        if (target[i].id === item.id) {
-          target[i].qty += item.qty; inv.splice(idx, 1); renderChestUI(); renderInv(); return;
+      var cap = isChest ? 8 : 16;
+      // try stack (skip tools — they never stack)
+      var stackable = !(TOOL_DUR && TOOL_DUR[item.id] !== undefined);
+      if (stackable) {
+        for (var i = 0; i < target.length; i++) {
+          if (target[i] && target[i].id === item.id) {
+            target[i].qty += item.qty;
+            inv[idx] = null;
+            renderChestUI(); renderInv(); return;
+          }
         }
       }
-      var cap = isChest ? 8 : 16;
-      if (target.length >= cap) { showMsg('Yer yok'); return; }
-      target.push({ id: item.id, qty: item.qty });
-      inv.splice(idx, 1);
+      // first empty slot up to cap
+      var slot = -1;
+      for (var i = 0; i < cap; i++) { if (!target[i]) { slot = i; break; } }
+      if (slot < 0) { showMsg('Yer yok'); return; }
+      target[slot] = { id: item.id, qty: item.qty, dur: item.dur };
+      inv[idx] = null;
       renderChestUI(); renderInv();
     };
     return d;
@@ -1850,6 +1909,7 @@ function respawn() {
   // drop all inventory at death location
   for (var i = 0; i < player.inv.length; i++) {
     var it = player.inv[i];
+    if (!it) continue;
     drops.push({
       x: player.x + rand(-15, 15),
       y: player.y + rand(-15, 15),
@@ -2037,7 +2097,7 @@ function draw() {
   if (merchant) {
     setFont(34); ctx.fillText('🧙', merchant.x, merchant.y);
     setFont(10); ctx.fillStyle = '#ffd060';
-    ctx.fillText('TÜCCAR (sağ tık)', merchant.x, merchant.y + 24);
+    ctx.fillText('TÜCCAR (X / sağ tık)', merchant.x, merchant.y + 24);
     // leaving timer
     var pct = Math.max(0, merchant.leaveT) / 90;
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
@@ -2533,13 +2593,12 @@ function stopFishing(won) {
   document.getElementById('fishUI').classList.remove('open');
   // wear the rod once per attempt (success or fail)
   for (var i = 0; i < player.inv.length; i++) {
-    if (player.inv[i].id === 'rod') {
+    if (player.inv[i] && player.inv[i].id === 'rod') {
       if (player.inv[i].dur === undefined) player.inv[i].dur = TOOL_DUR.rod;
       player.inv[i].dur--;
       if (player.inv[i].dur <= 0) {
         showMsg('💥 Olta kırıldı');
-        player.inv.splice(i, 1);
-        if (player.sel >= player.inv.length) player.sel = Math.max(0, player.inv.length - 1);
+        player.inv[i] = null;
       }
       renderInv();
       break;
