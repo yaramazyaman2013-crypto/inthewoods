@@ -70,6 +70,14 @@
   #dead h1 { color: #e15a5a; font-size: 56px; letter-spacing: 6px; }
   #dead button { background: #ffb86b; border: 0; padding: 12px 24px; font-weight: 700; border-radius: 5px; cursor: pointer; }
   .tip { font-size: 11px; color: #888; line-height: 1.5; }
+  #muteBtn {
+    position: fixed; top: 12px; right: 12px; z-index: 250;
+    background: rgba(0,0,0,0.7); border: 1px solid #444; color: #ffb86b;
+    width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
+    font-size: 18px; padding: 0; line-height: 38px;
+    transition: all .15s;
+  }
+  #muteBtn:hover { background: rgba(0,0,0,0.9); border-color: #ffb86b; }
   /* start screen */
   #start {
     position: fixed; inset: 0;
@@ -227,6 +235,8 @@
 </style>
 </head>
 <body>
+<audio id="bgmTitle" src="assets/title.mp3" loop preload="auto"></audio>
+<button id="muteBtn" onclick="window.__toggleMute()" title="Sesi aç/kapa">🔊</button>
 <div id="gameover">
   <div class="skull">💀</div>
   <h1>OYUN BİTTİ</h1>
@@ -1335,6 +1345,7 @@ function respawn() {
     gameStarted = false;
     document.getElementById('goInfo').textContent = 'Gün ' + day + '\'de öldün';
     document.getElementById('gameover').classList.add('show');
+    playTitleMusic();
     return;
   }
   // drop all inventory at death location
@@ -1881,10 +1892,35 @@ fishBar.addEventListener('mouseleave',function(){ if (fishing) fishing.holding =
 var _origUpdate = update;
 update = function(dt) { _origUpdate(dt); if (fishing) updateFishing(dt); };
 
+// ---------- Audio ----------
+var bgmTitle = document.getElementById('bgmTitle');
+bgmTitle.volume = 0.35;
+var muted = false;
+window.__toggleMute = function() {
+  muted = !muted;
+  bgmTitle.muted = muted;
+  document.getElementById('muteBtn').textContent = muted ? '🔇' : '🔊';
+};
+function playTitleMusic() {
+  if (muted) return;
+  var p = bgmTitle.play();
+  if (p && p.catch) p.catch(function(){});
+}
+function stopTitleMusic() { bgmTitle.pause(); bgmTitle.currentTime = 0; }
+// Try autoplay; if blocked, play on the first user gesture anywhere on the start screen
+playTitleMusic();
+['click','keydown','touchstart'].forEach(function(ev) {
+  document.addEventListener(ev, function once() {
+    playTitleMusic();
+    document.removeEventListener(ev, once);
+  }, { once: false });
+});
+
 // ---------- Start screen / game start ----------
 var gameStarted = false;
 window.__goBack = function() {
   document.getElementById('gameover').classList.remove('show');
+  playTitleMusic();
   // wipe state — fresh on next start
   trees.length = stones.length = rabbits.length = wolves.length = bears.length = 0;
   zombies.length = chickens.length = sheeps.length = ironOres.length = goldOres.length = 0;
@@ -1914,6 +1950,7 @@ window.__startGame = function(level) {
   revealAround(player.x, player.y, 220);
   document.getElementById('start').classList.add('hide');
   gameStarted = true;
+  stopTitleMusic();
   showMsg('Zorluk: ' + diff.label);
 };
 
