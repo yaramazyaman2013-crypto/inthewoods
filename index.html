@@ -2047,6 +2047,9 @@ function _tryPlay() { if (currentBgm.paused) playCurrent(); }
 var gameStarted = false;
 window.__goBack = function() {
   document.getElementById('gameover').classList.remove('show');
+  // gameover screen only triggers on hardcore death — save already wiped in respawn(),
+  // this is just belt-and-suspenders for hardcore. Normal mode never reaches here.
+  if (diff.lives === 1) { deleteSave(); refreshContinueBtn(); }
   playTitleMusic();
   // wipe state — fresh on next start
   trees.length = stones.length = rabbits.length = wolves.length = bears.length = 0;
@@ -2065,7 +2068,9 @@ window.__goBack = function() {
   document.getElementById('creditPanel').classList.remove('show');
 };
 // ---------- Save / Load ----------
-var SAVE_KEY = 'inthewoods.save.v1';
+var SAVE_KEY = 'inthewoods.save.v2';
+// clear obsolete v1 saves so the "DEVAM ET" button doesn't appear on first load
+try { localStorage.removeItem('inthewoods.save.v1'); } catch(e){}
 function diffKey() {
   for (var k in DIFFS) if (DIFFS[k] === diff) return k;
   return 'normal';
@@ -2181,10 +2186,14 @@ window.__menu = function(name) {
   document.getElementById('creditPanel').classList.toggle('show', name === 'credits');
 };
 window.__continueGame = function() {
-  if (!hasSave()) return;
+  if (!hasSave()) {
+    alert('Kayıtlı oyun yok. Önce OYNA ile başlayıp ESC → KAYDET yap.');
+    refreshContinueBtn();
+    return;
+  }
   // build world first so all systems initialize, then overwrite with save
   buildWorld();
-  if (!loadGame()) return;
+  if (!loadGame()) { refreshContinueBtn(); return; }
   document.getElementById('start').classList.add('hide');
   gameStarted = true;
   playGameMusic();
