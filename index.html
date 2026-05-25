@@ -1469,13 +1469,34 @@ function aiRabbit(r, dt) {
 }
 function aiHunter(p, dt) {
   var dp = dist(p, player);
+  var pSafe = inSafe(player);
+  var safeR = campfire.light + p.r + 4;
   if (dp < p.vision) {
-    // straight-line chase — mobs ignore the campfire safe zone now
+    // chase, but don't enter the campfire safe zone — circle the perimeter instead
     var dx = player.x - p.x, dy = player.y - p.y, d = Math.sqrt(dx*dx+dy*dy)||1;
-    p.x = p.x + dx/d * p.speed * dt;
-    p.y = p.y + dy/d * p.speed * dt;
+    var nx = p.x + dx/d * p.speed * dt;
+    var ny = p.y + dy/d * p.speed * dt;
+    var dCamp = Math.sqrt((nx-campfire.x)*(nx-campfire.x) + (ny-campfire.y)*(ny-campfire.y));
+    if (dCamp < safeR) {
+      // slide along the safe-zone tangent toward the player (no snap, no bounce)
+      var cx = p.x - campfire.x, cy = p.y - campfire.y;
+      var cd = Math.sqrt(cx*cx + cy*cy) || 1;
+      var tx = -cy/cd, ty = cx/cd;
+      if (tx*dx + ty*dy < 0) { tx = -tx; ty = -ty; }
+      nx = p.x + tx * p.speed * dt;
+      ny = p.y + ty * p.speed * dt;
+      var ndCamp = Math.sqrt((nx-campfire.x)*(nx-campfire.x) + (ny-campfire.y)*(ny-campfire.y));
+      if (ndCamp < safeR) {
+        // still inside — keep at perimeter without snapping
+        var a = Math.atan2(ny - campfire.y, nx - campfire.x);
+        nx = campfire.x + Math.cos(a) * safeR;
+        ny = campfire.y + Math.sin(a) * safeR;
+      }
+    }
+    p.x = nx; p.y = ny;
     p.aT -= dt;
-    if (dp < p.r + player.r + 4 && p.aT <= 0) {
+    // attack only if player is reachable (i.e. outside safe zone)
+    if (!pSafe && dp < p.r + player.r + 4 && p.aT <= 0) {
       player.hp -= p.dmg * diff.dmgMult; player.dmgCool = .25;
       if (window.__sfxHurt) window.__sfxHurt();
       burst(player.x, player.y, '#e15a5a', 6);
@@ -2401,27 +2422,27 @@ function draw() {
   if (darkness > 0) {
     ctx.fillStyle = 'rgba(10, 20, 50, ' + darkness + ')';
     ctx.fillRect(0, 0, W, H);
-    // additive warm glow for torches (composite='lighter' adds light on top of darkness)
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    function torchLight(wx, wy, radius) {
-      var lx = wx - view.x, ly = wy - view.y;
-      if (lx < -radius || lx > W + radius || ly < -radius || ly > H + radius) return;
-      var grd = ctx.createRadialGradient(lx, ly, 4, lx, ly, radius);
-      // strong warm yellow at center, fades to nothing — 'lighter' adds it to the dark blue
-      grd.addColorStop(0,    'rgba(255,200,90,0.85)');
-      grd.addColorStop(0.45, 'rgba(255,160,60,0.45)');
-      grd.addColorStop(1,    'rgba(255,160,60,0)');
-      ctx.fillStyle = grd;
-      ctx.beginPath(); ctx.arc(lx, ly, radius, 0, Math.PI*2); ctx.fill();
+    // additive warm glow for torches — only at actual night, not during a rainy day
+    if (phase > 0.7) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      function torchLight(wx, wy, radius) {
+        var lx = wx - view.x, ly = wy - view.y;
+        if (lx < -radius || lx > W + radius || ly < -radius || ly > H + radius) return;
+        var grd = ctx.createRadialGradient(lx, ly, 4, lx, ly, radius);
+        grd.addColorStop(0,    'rgba(255,200,90,0.85)');
+        grd.addColorStop(0.45, 'rgba(255,160,60,0.45)');
+        grd.addColorStop(1,    'rgba(255,160,60,0)');
+        ctx.fillStyle = grd;
+        ctx.beginPath(); ctx.arc(lx, ly, radius, 0, Math.PI*2); ctx.fill();
+      }
+      for (var ti = 0; ti < placed.length; ti++) {
+        if (placed[ti].kind === 'torch') torchLight(placed[ti].x, placed[ti].y, 120);
+      }
+      if (getTool() === 'torch') torchLight(player.x, player.y, 130);
+      torchLight(campfire.x, campfire.y, 180);
+      ctx.restore();
     }
-    for (var ti = 0; ti < placed.length; ti++) {
-      if (placed[ti].kind === 'torch') torchLight(placed[ti].x, placed[ti].y, 120);
-    }
-    if (getTool() === 'torch') torchLight(player.x, player.y, 130);
-    // campfire glow at night too
-    torchLight(campfire.x, campfire.y, 180);
-    ctx.restore();
   }
 
   // minimap with fog
