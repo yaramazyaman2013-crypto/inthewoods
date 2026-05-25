@@ -1455,6 +1455,12 @@ function aiHunter(p, dt) {
 var last = performance.now();
 var statT = 0, dayT = 0, day = 1, cookT = 0, craftT = 0, zombieSpawnT = 5, sleeping = false;
 var respawnT = 0;
+// weather + ambient timers
+var weather = 'clear';      // 'clear' | 'rain'
+var weatherT = 120 + Math.random() * 90;
+var rainIntensity = 0;      // visual fade 0..1
+var rainDrops = [];         // {x,y,vy,len} in screen space
+var birdT = 8;              // seconds until next chirp
 var dead = false; // unused now; respawn handles death
 
 function step(now) {
@@ -1684,6 +1690,29 @@ function update(dt) {
       nextMerchantDay = day + (2 + Math.floor(Math.random() * 2));
       if (document.getElementById('merchantUI')) document.getElementById('merchantUI').classList.remove('open');
     }
+  }
+  // weather
+  weatherT -= dt;
+  if (weatherT <= 0) {
+    if (weather === 'clear') {
+      weather = 'rain';
+      weatherT = 60 + Math.random() * 90;
+      showMsg('🌧 Yağmur başladı');
+    } else {
+      weather = 'clear';
+      weatherT = 120 + Math.random() * 180;
+      showMsg('☀ Hava açıldı');
+    }
+  }
+  var rainTarget = (weather === 'rain') ? 1 : 0;
+  rainIntensity += (rainTarget - rainIntensity) * Math.min(1, dt * 0.5);
+  setRainAudio(rainIntensity * 0.6);
+  // bird chirps during daytime when not raining
+  birdT -= dt;
+  if (birdT <= 0) {
+    var phaseBird = dayT / DAY_LEN;
+    if (phaseBird < 0.65 && weather === 'clear') playBirdChirp();
+    birdT = 12 + Math.random() * 26;
   }
   var dayEl = document.getElementById('day');
   var phase = dayT / DAY_LEN;
@@ -2268,10 +2297,39 @@ function draw() {
   ctx.restore();
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 
+  // rain (drawn in screen space, before night darkness)
+  if (rainIntensity > 0.05) {
+    // maintain a pool of drops
+    var targetCount = Math.floor(rainIntensity * 180);
+    while (rainDrops.length < targetCount) {
+      rainDrops.push({ x: Math.random()*W, y: Math.random()*H, vy: 700 + Math.random()*250, len: 8 + Math.random()*6 });
+    }
+    while (rainDrops.length > targetCount) rainDrops.pop();
+    ctx.save();
+    ctx.strokeStyle = 'rgba(180,200,230,' + (0.35 * rainIntensity) + ')';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    for (var ri = 0; ri < rainDrops.length; ri++) {
+      var rd = rainDrops[ri];
+      rd.y += rd.vy * (1/60);
+      rd.x -= 80 * (1/60); // slight wind slant
+      if (rd.y > H) { rd.y = -10; rd.x = Math.random()*W; }
+      if (rd.x < -20) rd.x = W + 20;
+      ctx.moveTo(rd.x, rd.y);
+      ctx.lineTo(rd.x - 3, rd.y + rd.len);
+    }
+    ctx.stroke();
+    // subtle blue tint
+    ctx.fillStyle = 'rgba(60,90,140,' + (0.10 * rainIntensity) + ')';
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
   // night overlay based on day phase
   var phase = dayT / DAY_LEN;
   var darkness = 0;
   if (phase > 0.7) darkness = (phase - 0.7) / 0.3 * 0.55;
+  // rain darkens the sky a bit
+  darkness = Math.min(0.65, darkness + rainIntensity * 0.18);
   if (darkness > 0) {
     ctx.fillStyle = 'rgba(10, 20, 50, ' + darkness + ')';
     ctx.fillRect(0, 0, W, H);
@@ -2442,6 +2500,7 @@ sfxHit.volume = sfxVol; sfxCraft.volume = sfxVol; sfxHurt.volume = sfxVol;
 function applyVolumes() {
   bgmTitle.volume = musicVol; bgmGame.volume = musicVol;
   sfxHit.volume = sfxVol; sfxCraft.volume = sfxVol; sfxHurt.volume = sfxVol;
+  if (typeof applyAmbientVolume === 'function') applyAmbientVolume();
 }
 function playSfx(audio) {
   if (muted) return;
@@ -2482,6 +2541,76 @@ function switchBgm(next) {
 function playTitleMusic() { switchBgm(bgmTitle); }
 function playGameMusic()  { switchBgm(bgmGame); }
 function stopTitleMusic() { try { bgmTitle.pause(); bgmTitle.currentTime = 0; } catch(e){} }
+
+// ---------- Procedural ambient: wind, rain, birds ----------
+var actx = null, ambientNodes = null;
+function ensureAudioCtx() {
+  if (actx) return actx;
+  try {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    actx = new AC();
+  } catch(e) { return null; }
+  return actx;
+}
+function makeNoiseBuffer(secs) {
+  var sr = actx.sampleRate;
+  var buf = actx.createBuffer(1, sr * secs, sr);
+  var data = buf.getChannelData(0);
+  for (var i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  return buf;
+}
+function buildAmbient() {
+  if (ambientNodes || !ensureAudioCtx()) return;
+  var noiseBuf = makeNoiseBuffer(4);
+  var master = actx.createGain(); master.gain.value = sfxVol * 0.4; master.connect(actx.destination);
+  // wind: lowpass-filtered noise with slow LFO on gain
+  var wsrc = actx.createBufferSource(); wsrc.buffer = noiseBuf; wsrc.loop = true;
+  var wlp = actx.createBiquadFilter(); wlp.type = 'lowpass'; wlp.frequency.value = 280;
+  var wg  = actx.createGain(); wg.gain.value = 0.12;
+  var wlfo = actx.createOscillator(); wlfo.frequency.value = 0.12;
+  var wlfoGain = actx.createGain(); wlfoGain.gain.value = 0.08;
+  wlfo.connect(wlfoGain); wlfoGain.connect(wg.gain);
+  wsrc.connect(wlp); wlp.connect(wg); wg.connect(master);
+  wsrc.start(); wlfo.start();
+  // rain: brighter bandpass noise + a touch of high-shelf hiss
+  var rsrc = actx.createBufferSource(); rsrc.buffer = noiseBuf; rsrc.loop = true;
+  var rbp = actx.createBiquadFilter(); rbp.type = 'bandpass'; rbp.frequency.value = 1800; rbp.Q.value = 0.6;
+  var rg  = actx.createGain(); rg.gain.value = 0; // ramped when raining
+  rsrc.connect(rbp); rbp.connect(rg); rg.connect(master);
+  rsrc.start();
+  ambientNodes = { master: master, wind: wg, rain: rg };
+}
+function setRainAudio(target) {
+  if (!ambientNodes) return;
+  var now = actx.currentTime;
+  ambientNodes.rain.gain.cancelScheduledValues(now);
+  ambientNodes.rain.gain.linearRampToValueAtTime(target, now + 2);
+}
+function applyAmbientVolume() {
+  if (ambientNodes) ambientNodes.master.gain.value = muted ? 0 : sfxVol * 0.4;
+}
+function playBirdChirp() {
+  if (!actx || muted) return;
+  var now = actx.currentTime;
+  var notes = 2 + Math.floor(Math.random() * 3);
+  for (var i = 0; i < notes; i++) {
+    var t0 = now + i * 0.13;
+    var osc = actx.createOscillator(); osc.type = 'sine';
+    var f0 = 1800 + Math.random() * 1400;
+    osc.frequency.setValueAtTime(f0, t0);
+    osc.frequency.exponentialRampToValueAtTime(f0 * (1.4 + Math.random()*0.6), t0 + 0.08);
+    var g = actx.createGain(); g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(sfxVol * 0.18, t0 + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.12);
+    osc.connect(g); g.connect(actx.destination);
+    osc.start(t0); osc.stop(t0 + 0.13);
+  }
+}
+// kick off ambient on first gesture (same listener used for music autoplay)
+['click','keydown','touchstart','mousedown'].forEach(function(ev) {
+  document.addEventListener(ev, function(){ buildAmbient(); applyAmbientVolume(); }, { once: true, capture: true });
+});
 // Try autoplay; retry on every user gesture until it sticks
 playCurrent();
 function _tryPlay() { if (currentBgm.paused) playCurrent(); }
