@@ -296,6 +296,7 @@
     <div class="locked" id="hardcoreLock" style="display:none">🔒 HARDCORE — zorluk kilitli</div>
   </div>
   <button class="closebtn" onclick="window.__closeSettings('game')">DEVAM ET</button>
+  <button class="closebtn" style="background:#3a5a7a" id="saveBtn" onclick="window.__saveGame()">💾 KAYDET</button>
   <button class="closebtn" style="background:#7a3a3a" onclick="window.__backToMenu()">🏠 ANA MENÜYE DÖN</button>
 </div>
 <div id="gameover">
@@ -359,6 +360,7 @@
   <div class="sub">A SURVIVAL GAME · BY MIRROW</div>
   <div class="menu" id="mainMenu">
     <button onclick="window.__menu('play')">▶ OYNA</button>
+    <button onclick="window.__continueGame()" id="continueBtn" style="display:none">⏵ DEVAM ET</button>
     <button onclick="window.__openSettings('start')">⚙ AYARLAR</button>
     <button onclick="window.__menu('credits')">CREDITS</button>
   </div>
@@ -1424,6 +1426,7 @@ function respawn() {
   if (livesLeft <= 0 && diff.lives === 1) {
     // hardcore game over screen
     gameStarted = false;
+    deleteSave();
     document.getElementById('goInfo').textContent = 'Gün ' + day + '\'de öldün';
     document.getElementById('gameover').classList.add('show');
     playTitleMusic();
@@ -2057,6 +2060,60 @@ window.__goBack = function() {
   document.getElementById('diffPanel').classList.remove('show');
   document.getElementById('creditPanel').classList.remove('show');
 };
+// ---------- Save / Load ----------
+var SAVE_KEY = 'inthewoods.save.v1';
+function diffKey() {
+  for (var k in DIFFS) if (DIFFS[k] === diff) return k;
+  return 'normal';
+}
+function hasSave() { try { return !!localStorage.getItem(SAVE_KEY); } catch(e){ return false; } }
+function saveGame() {
+  if (diff.lives === 1) { showMsg('⚠ HARDCORE — kayıt yok'); return; }
+  try {
+    var data = {
+      v: 1, ts: Date.now(),
+      diff: diffKey(), livesLeft: livesLeft,
+      day: day, dayT: dayT, statT: statT,
+      player: player,
+      trees: trees, stones: stones, rabbits: rabbits, wolves: wolves,
+      bears: bears, zombies: zombies, chickens: chickens, sheeps: sheeps,
+      ironOres: ironOres, goldOres: goldOres,
+      buildings: buildings, drops: drops, placed: placed, dens: dens, lakes: lakes,
+      campfire: campfire,
+      fog: Array.from(fog)
+    };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    showMsg('💾 Kaydedildi (Gün ' + day + ')');
+  } catch(e) {
+    showMsg('⚠ Kayıt başarısız: ' + e.message);
+  }
+}
+function loadGame() {
+  try {
+    var raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return false;
+    var d = JSON.parse(raw);
+    diff = DIFFS[d.diff] || DIFFS.normal;
+    livesLeft = d.livesLeft;
+    day = d.day; dayT = d.dayT; statT = d.statT || 0;
+    Object.assign(player, d.player);
+    trees = d.trees; stones = d.stones; rabbits = d.rabbits; wolves = d.wolves;
+    bears = d.bears; zombies = d.zombies; chickens = d.chickens; sheeps = d.sheeps;
+    ironOres = d.ironOres; goldOres = d.goldOres;
+    buildings = d.buildings; drops = d.drops; placed = d.placed;
+    dens = d.dens; lakes = d.lakes;
+    Object.assign(campfire, d.campfire);
+    fog = new Uint8Array(d.fog);
+    projectiles = []; particles = [];
+    return true;
+  } catch(e) {
+    showMsg('⚠ Yükleme başarısız: ' + e.message);
+    return false;
+  }
+}
+function deleteSave() { try { localStorage.removeItem(SAVE_KEY); } catch(e){} }
+window.__saveGame = saveGame;
+
 // ---------- Settings UI ----------
 function bindVolume(idMusic, idMusicVal, idSfx, idSfxVal) {
   var m = document.getElementById(idMusic), mv = document.getElementById(idMusicVal);
@@ -2101,6 +2158,7 @@ window.__openSettings = function(which) {
   } else {
     bindVolume('volMusic2','volMusicVal2','volSfx2','volSfxVal2');
     refreshDiffButtons();
+    refreshSaveBtn();
     document.getElementById('settingsGame').classList.add('open');
   }
 };
@@ -2118,12 +2176,33 @@ window.__menu = function(name) {
   document.getElementById('diffPanel').classList.toggle('show', name === 'play');
   document.getElementById('creditPanel').classList.toggle('show', name === 'credits');
 };
+window.__continueGame = function() {
+  if (!hasSave()) return;
+  // build world first so all systems initialize, then overwrite with save
+  buildWorld();
+  if (!loadGame()) return;
+  document.getElementById('start').classList.add('hide');
+  gameStarted = true;
+  playGameMusic();
+  showMsg('⏵ Devam ediliyor — Gün ' + day);
+};
+function refreshContinueBtn() {
+  var btn = document.getElementById('continueBtn');
+  if (btn) btn.style.display = hasSave() ? 'block' : 'none';
+}
+function refreshSaveBtn() {
+  var btn = document.getElementById('saveBtn');
+  if (!btn) return;
+  if (diff.lives === 1) { btn.style.display = 'none'; }
+  else { btn.style.display = 'block'; }
+}
 window.__backToMenu = function() {
   if (!confirm('Ana menüye dönülsün mü? (Kaydetmediysen ilerleme kaybolur)')) return;
   document.getElementById('settingsGame').classList.remove('open');
   gameStarted = false;
   document.getElementById('start').classList.remove('hide');
   window.__menu('main');
+  refreshContinueBtn();
   playTitleMusic();
 };
 window.__startGame = function(level) {
@@ -2146,6 +2225,7 @@ step = function(now) {
 };
 
 requestAnimationFrame(step);
+refreshContinueBtn();
 })();
 </script>
 </body>
