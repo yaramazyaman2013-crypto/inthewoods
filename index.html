@@ -2210,6 +2210,10 @@ window.__backToMenu = function() {
   playTitleMusic();
 };
 window.__startGame = function(level) {
+  if (hasSave()) {
+    if (!confirm('Mevcut kayıt silinecek. Yeni oyun başlatılsın mı?')) return;
+  }
+  deleteSave();
   diff = DIFFS[level] || DIFFS.normal;
   livesLeft = diff.lives;
   buildWorld();
