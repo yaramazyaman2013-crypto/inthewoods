@@ -236,6 +236,7 @@
 </head>
 <body>
 <audio id="bgmTitle" src="assets/title.mp3" loop preload="auto"></audio>
+<audio id="bgmGame"  src="assets/overworld.mp3" loop preload="auto"></audio>
 <button id="muteBtn" onclick="window.__toggleMute()" title="Sesi aç/kapa">🔊</button>
 <div id="gameover">
   <div class="skull">💀</div>
@@ -1894,33 +1895,43 @@ update = function(dt) { _origUpdate(dt); if (fishing) updateFishing(dt); };
 
 // ---------- Audio ----------
 var bgmTitle = document.getElementById('bgmTitle');
-bgmTitle.volume = 0.35;
-var muted = false;
-var audioErr = false;
-bgmTitle.addEventListener('error', function(){
-  audioErr = true;
-  console.error('[audio] load failed:', bgmTitle.error);
-  document.getElementById('muteBtn').textContent = '⚠';
-  document.getElementById('muteBtn').title = 'Müzik yüklenemedi: ' + (bgmTitle.error && bgmTitle.error.message || 'unknown');
+var bgmGame  = document.getElementById('bgmGame');
+bgmTitle.volume = 0.35; bgmGame.volume = 0.30;
+var muted = false, audioErr = false;
+var currentBgm = bgmTitle; // which track should be playing right now
+[bgmTitle, bgmGame].forEach(function(a){
+  a.addEventListener('error', function(){
+    audioErr = true;
+    console.error('[audio] load failed:', a.src, a.error);
+    var btn = document.getElementById('muteBtn');
+    btn.textContent = '⚠';
+    btn.title = 'Müzik yüklenemedi: ' + (a.error && a.error.message || 'unknown');
+  });
+  a.addEventListener('canplaythrough', function(){ console.log('[audio] ready:', a.src); });
 });
-bgmTitle.addEventListener('canplaythrough', function(){ console.log('[audio] ready'); });
 window.__toggleMute = function() {
   muted = !muted;
-  bgmTitle.muted = muted;
+  bgmTitle.muted = muted; bgmGame.muted = muted;
   document.getElementById('muteBtn').textContent = muted ? '🔇' : (audioErr ? '⚠' : '🔊');
-  if (!muted) playTitleMusic();
+  if (!muted) playCurrent();
 };
-function playTitleMusic() {
+function playCurrent() {
   if (muted || audioErr) return;
-  var p = bgmTitle.play();
-  if (p && p.catch) p.catch(function(err){
-    console.warn('[audio] play blocked:', err && err.message);
-  });
+  var p = currentBgm.play();
+  if (p && p.catch) p.catch(function(err){ console.warn('[audio] play blocked:', err && err.message); });
 }
+function switchBgm(next) {
+  if (currentBgm === next) { playCurrent(); return; }
+  try { currentBgm.pause(); currentBgm.currentTime = 0; } catch(e){}
+  currentBgm = next;
+  playCurrent();
+}
+function playTitleMusic() { switchBgm(bgmTitle); }
+function playGameMusic()  { switchBgm(bgmGame); }
 function stopTitleMusic() { try { bgmTitle.pause(); bgmTitle.currentTime = 0; } catch(e){} }
-// Try autoplay; persistent retry on every user gesture until it sticks
-playTitleMusic();
-function _tryPlay() { if (bgmTitle.paused) playTitleMusic(); }
+// Try autoplay; retry on every user gesture until it sticks
+playCurrent();
+function _tryPlay() { if (currentBgm.paused) playCurrent(); }
 ['click','keydown','touchstart','mousedown'].forEach(function(ev) {
   document.addEventListener(ev, _tryPlay, true);
 });
@@ -1959,7 +1970,7 @@ window.__startGame = function(level) {
   revealAround(player.x, player.y, 220);
   document.getElementById('start').classList.add('hide');
   gameStarted = true;
-  stopTitleMusic();
+  playGameMusic();
   showMsg('Zorluk: ' + diff.label);
 };
 
