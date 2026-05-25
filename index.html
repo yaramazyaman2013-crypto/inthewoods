@@ -120,28 +120,13 @@
     background: linear-gradient(180deg, rgba(15,30,10,0.5), #051005 80%);
     z-index: 1;
   }
-  #scenery .tree {
-    position: absolute; bottom: var(--b, 0);
-    transform-origin: center bottom;
-    line-height: 0.72;
-    animation: sway-tree 5s ease-in-out infinite;
+  #scenery .tree, #scenery .item {
+    position: absolute;
+    transform-origin: center;
+    animation: sway 5s ease-in-out infinite;
   }
-  #scenery .stack {
-    position: absolute; bottom: var(--b, 0);
-    transform-origin: center bottom;
-    line-height: 0.74; text-align: center;
-    display: flex; flex-direction: column;
-    animation: sway-stack 5s ease-in-out infinite;
-  }
-  #scenery .stack span { display: block; }
-  #scenery .item {
-    position: absolute; bottom: var(--b, 0);
-    transform-origin: center bottom;
-    line-height: 0.8;
-    animation: bob-item 4s ease-in-out infinite;
-  }
-  /* flying creatures actually fly — keep them up */
-  #scenery .fly { position: absolute; animation: float 4s ease-in-out infinite; }
+  #scenery .item { animation: float 4s ease-in-out infinite; }
+  #scenery .fly  { position: absolute; animation: float 4s ease-in-out infinite; }
   #scenery .glow {
     position: absolute; bottom: 12%; left: 50%; transform: translateX(-50%);
     width: 320px; height: 160px;
