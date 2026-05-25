@@ -570,33 +570,54 @@ function spawnZombie(x,y){ return { kind:'zombie', x:x, y:y, r:13, hp:8, hpMax:8
 function spawnChicken(x,y){ return { kind:'chicken', x:x, y:y, r:8, hp:2, hpMax:2, speed:60, vision:100, tx:x, ty:y, wT:0, fT:0 }; }
 function spawnSheep(x,y){ return { kind:'sheep', x:x, y:y, r:12, hp:4, hpMax:4, speed:50, vision:120, tx:x, ty:y, wT:0, fT:0, wool:true }; }
 
+function inLake(x, y, pad) {
+  pad = pad || 0;
+  for (var i = 0; i < lakes.length; i++) {
+    var L = lakes[i];
+    var dx = (x - L.x) / (L.rx + pad);
+    var dy = (y - L.y) / (L.ry + pad);
+    if (dx*dx + dy*dy < 1) return true;
+  }
+  return false;
+}
 function buildWorld() {
+  // lakes FIRST so everything else can avoid them
+  for (var i = 0; i < 2; i++) {
+    var p, t = 0;
+    do { p = { x: rand(200, WORLD_W-200), y: rand(200, WORLD_H-200) }; t++; }
+    while (dist(p, campfire) < 300 && t < 20);
+    lakes.push({ x:p.x, y:p.y, rx: rand(70, 110), ry: rand(50, 80) });
+  }
   // trees
   for (var i = 0; i < 45; i++) {
     var p, t = 0;
     do { p = { x: rand(40, WORLD_W-40), y: rand(40, WORLD_H-40) }; t++; }
-    while (dist(p, campfire) < 130 && t < 20);
+    while ((dist(p, campfire) < 130 || inLake(p.x, p.y, 18)) && t < 30);
+    if (inLake(p.x, p.y, 18)) continue;
     trees.push({ x:p.x, y:p.y, hp:3, hpMax:3, r:18, sway:Math.random()*6, growth:1 });
   }
   // stones
   for (var i = 0; i < 28; i++) {
     var p, t = 0;
     do { p = { x: rand(40, WORLD_W-40), y: rand(40, WORLD_H-40) }; t++; }
-    while (dist(p, campfire) < 110 && t < 20);
+    while ((dist(p, campfire) < 110 || inLake(p.x, p.y, 14)) && t < 30);
+    if (inLake(p.x, p.y, 14)) continue;
     stones.push({ x:p.x, y:p.y, hp:3, hpMax:3, r:14 });
   }
   // iron ore (need axe to mine)
   for (var i = 0; i < 12; i++) {
     var p, t = 0;
     do { p = { x: rand(60, WORLD_W-60), y: rand(60, WORLD_H-60) }; t++; }
-    while (dist(p, campfire) < 180 && t < 20);
+    while ((dist(p, campfire) < 180 || inLake(p.x, p.y, 16)) && t < 30);
+    if (inLake(p.x, p.y, 16)) continue;
     ironOres.push({ x:p.x, y:p.y, hp:5, hpMax:5, r:16 });
   }
   // gold ore (need pickaxe to mine, rarer)
   for (var i = 0; i < 5; i++) {
     var p, t = 0;
     do { p = { x: rand(80, WORLD_W-80), y: rand(80, WORLD_H-80) }; t++; }
-    while (dist(p, campfire) < 260 && t < 20);
+    while ((dist(p, campfire) < 260 || inLake(p.x, p.y, 16)) && t < 30);
+    if (inLake(p.x, p.y, 16)) continue;
     goldOres.push({ x:p.x, y:p.y, hp:6, hpMax:6, r:16 });
   }
   // structures — variety: ruin, plane wreck, lake
@@ -604,15 +625,9 @@ function buildWorld() {
   for (var i = 0; i < structKinds.length; i++) {
     var p, t = 0;
     do { p = { x: rand(180, WORLD_W-180), y: rand(180, WORLD_H-180) }; t++; }
-    while (dist(p, campfire) < 260 && t < 20);
+    while ((dist(p, campfire) < 260 || inLake(p.x, p.y, 40)) && t < 30);
+    if (inLake(p.x, p.y, 40)) continue;
     buildings.push({ x:p.x, y:p.y, kind:structKinds[i], r: 36, looted:false });
-  }
-  // lakes (visual obstacles, no loot)
-  for (var i = 0; i < 2; i++) {
-    var p, t = 0;
-    do { p = { x: rand(200, WORLD_W-200), y: rand(200, WORLD_H-200) }; t++; }
-    while (dist(p, campfire) < 300 && t < 20);
-    lakes.push({ x:p.x, y:p.y, rx: rand(70, 110), ry: rand(50, 80) });
   }
   // dens — fewer overall, cap per den, periodic respawn
   var mm = diff.mobMult;
@@ -627,7 +642,8 @@ function buildWorld() {
     for (var j = 0; j < defs[d].n; j++) {
       var p, t = 0;
       do { p = { x: rand(100, WORLD_W-100), y: rand(100, WORLD_H-100) }; t++; }
-      while (dist(p, campfire) < campfire.light + 140 && t < 20);
+      while ((dist(p, campfire) < campfire.light + 140 || inLake(p.x, p.y, defs[d].r)) && t < 30);
+      if (inLake(p.x, p.y, defs[d].r)) continue;
       dens.push({ kind:defs[d].kind, x:p.x, y:p.y, r:defs[d].r, spawnT:3, every:defs[d].every, cap:defs[d].cap });
     }
   }
@@ -942,8 +958,8 @@ function interact(wp) {
     var ang = Math.atan2(wp.y - player.y, wp.x - player.x);
     projectiles.push({
       x: player.x + Math.cos(ang)*16, y: player.y + Math.sin(ang)*16,
-      vx: Math.cos(ang)*640, vy: Math.sin(ang)*640,
-      life: 1.4, dmg: 2, kind:'arrow'
+      vx: Math.cos(ang)*720, vy: Math.sin(ang)*720,
+      life: 2.4, dmg: 2, kind:'arrow', fric: 0.992
     });
     player.face = ang; player.hitCool = 0.18;
     if (window.__sfxHit) window.__sfxHit();
@@ -1297,15 +1313,19 @@ function update(dt) {
     }
   }
 
-  // projectiles (spears)
+  // projectiles (spears + arrows)
   for (var i = projectiles.length - 1; i >= 0; i--) {
     var pj = projectiles[i];
     pj.life -= dt;
     pj.x += pj.vx * dt; pj.y += pj.vy * dt;
-    pj.vx *= 0.97; pj.vy *= 0.97;
-    if (pj.life <= 0) {
-      // landed without hitting — spear stays as a pickup, arrows are lost
+    var fric = pj.fric || 0.97;
+    pj.vx *= fric; pj.vy *= fric;
+    var speed2 = pj.vx*pj.vx + pj.vy*pj.vy;
+    // land when life runs out OR projectile slowed below threshold —
+    // prevents stale slow projectiles from killing creatures that walk past
+    if (pj.life <= 0 || speed2 < 80*80) {
       if (pj.kind === 'spear') drops.push({ x: pj.x, y: pj.y, id: 'spear', qty: 1 });
+      else if (pj.kind === 'arrow') drops.push({ x: pj.x, y: pj.y, id: 'arrow', qty: 1 });
       projectiles.splice(i, 1); continue;
     }
     function hitArr(arr, list, type) {
