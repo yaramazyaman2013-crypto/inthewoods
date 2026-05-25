@@ -1896,24 +1896,33 @@ update = function(dt) { _origUpdate(dt); if (fishing) updateFishing(dt); };
 var bgmTitle = document.getElementById('bgmTitle');
 bgmTitle.volume = 0.35;
 var muted = false;
+var audioErr = false;
+bgmTitle.addEventListener('error', function(){
+  audioErr = true;
+  console.error('[audio] load failed:', bgmTitle.error);
+  document.getElementById('muteBtn').textContent = '⚠';
+  document.getElementById('muteBtn').title = 'Müzik yüklenemedi: ' + (bgmTitle.error && bgmTitle.error.message || 'unknown');
+});
+bgmTitle.addEventListener('canplaythrough', function(){ console.log('[audio] ready'); });
 window.__toggleMute = function() {
   muted = !muted;
   bgmTitle.muted = muted;
-  document.getElementById('muteBtn').textContent = muted ? '🔇' : '🔊';
+  document.getElementById('muteBtn').textContent = muted ? '🔇' : (audioErr ? '⚠' : '🔊');
+  if (!muted) playTitleMusic();
 };
 function playTitleMusic() {
-  if (muted) return;
+  if (muted || audioErr) return;
   var p = bgmTitle.play();
-  if (p && p.catch) p.catch(function(){});
+  if (p && p.catch) p.catch(function(err){
+    console.warn('[audio] play blocked:', err && err.message);
+  });
 }
-function stopTitleMusic() { bgmTitle.pause(); bgmTitle.currentTime = 0; }
-// Try autoplay; if blocked, play on the first user gesture anywhere on the start screen
+function stopTitleMusic() { try { bgmTitle.pause(); bgmTitle.currentTime = 0; } catch(e){} }
+// Try autoplay; persistent retry on every user gesture until it sticks
 playTitleMusic();
-['click','keydown','touchstart'].forEach(function(ev) {
-  document.addEventListener(ev, function once() {
-    playTitleMusic();
-    document.removeEventListener(ev, once);
-  }, { once: false });
+function _tryPlay() { if (bgmTitle.paused) playTitleMusic(); }
+['click','keydown','touchstart','mousedown'].forEach(function(ev) {
+  document.addEventListener(ev, _tryPlay, true);
 });
 
 // ---------- Start screen / game start ----------
