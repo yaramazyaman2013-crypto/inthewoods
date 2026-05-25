@@ -1469,13 +1469,21 @@ function aiRabbit(r, dt) {
 }
 function aiHunter(p, dt) {
   var dp = dist(p, player);
-  if (dp < p.vision) {
-    // straight-line chase — mobs ignore the campfire safe zone now
+  var safeZoneDist = campfire.light + p.r;
+  if (dp < p.vision && !inSafe(player)) {
     var dx = player.x - p.x, dy = player.y - p.y, d = Math.sqrt(dx*dx+dy*dy)||1;
-    p.x = p.x + dx/d * p.speed * dt;
-    p.y = p.y + dy/d * p.speed * dt;
+    var nx = p.x + dx/d * p.speed * dt;
+    var ny = p.y + dy/d * p.speed * dt;
+    // push back if chasing would enter the campfire safe zone
+    var cdn = Math.hypot(nx - campfire.x, ny - campfire.y);
+    if (cdn < safeZoneDist) {
+      var ca = Math.atan2(ny - campfire.y, nx - campfire.x);
+      nx = campfire.x + Math.cos(ca) * safeZoneDist;
+      ny = campfire.y + Math.sin(ca) * safeZoneDist;
+    }
+    p.x = nx; p.y = ny;
     p.aT -= dt;
-    if (dp < p.r + player.r + 4 && p.aT <= 0) {
+    if (dp < p.r + player.r + 4 && p.aT <= 0 && !inSafe(player)) {
       player.hp -= p.dmg * diff.dmgMult; player.dmgCool = .25;
       if (window.__sfxHurt) window.__sfxHurt();
       burst(player.x, player.y, '#e15a5a', 6);
@@ -1486,10 +1494,24 @@ function aiHunter(p, dt) {
     var pdx = p.tx - p.x, pdy = p.ty - p.y;
     if (p.wT <= 0 || (pdx*pdx + pdy*pdy) < 100) {
       p.wT = rand(0.6, 1.8);
-      p.tx = clamp(p.x + rand(-220, 220), 20, WORLD_W-20);
-      p.ty = clamp(p.y + rand(-220, 220), 20, WORLD_H-20);
+      var wx = clamp(p.x + rand(-220, 220), 20, WORLD_W-20);
+      var wy = clamp(p.y + rand(-220, 220), 20, WORLD_H-20);
+      // ensure wander target is outside the campfire safe zone
+      if (Math.hypot(wx - campfire.x, wy - campfire.y) < safeZoneDist) {
+        var wa = Math.atan2(wy - campfire.y, wx - campfire.x);
+        wx = campfire.x + Math.cos(wa) * (safeZoneDist + 10);
+        wy = campfire.y + Math.sin(wa) * (safeZoneDist + 10);
+      }
+      p.tx = wx; p.ty = wy;
     }
     moveTo(p, p.tx, p.ty, dt);
+    // prevent wandering into the campfire safe zone
+    var wdn = Math.hypot(p.x - campfire.x, p.y - campfire.y);
+    if (wdn < safeZoneDist) {
+      var wa2 = Math.atan2(p.y - campfire.y, p.x - campfire.x);
+      p.x = campfire.x + Math.cos(wa2) * safeZoneDist;
+      p.y = campfire.y + Math.sin(wa2) * safeZoneDist;
+    }
   }
   if (p.aT > 0) p.aT -= dt;
   p.x = clamp(p.x, 5, WORLD_W-5); p.y = clamp(p.y, 5, WORLD_H-5);
