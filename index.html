@@ -34,6 +34,7 @@
   .slot.sel { border-color: #ffb86b; box-shadow: 0 0 6px rgba(255,184,107,.5); }
   .slot .qty { position: absolute; bottom: 1px; right: 3px; font-size: 10px; color: #ffb86b; font-weight: 700; }
   .slot .k { position: absolute; top: 1px; left: 3px; font-size: 9px; color: #666; }
+  .slot .durbar { position: absolute; bottom: 0; left: 0; height: 3px; border-radius: 0 2px 2px 0; }
   .recipe {
     display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: #1a1a1a;
     border: 1px solid #2a2a2a; border-radius: 5px; margin-bottom: 5px; cursor: pointer;
@@ -540,6 +541,7 @@ var ITEMS = {
   fish_cooked: { name:'Pişmiş Balık',icon:'🍣' },
   potato_cooked:{name:'Pişmiş Patates',icon:'🍟' },
   carrot_cooked:{name:'Pişmiş Havuç',icon:'🥘' },
+  bread:        {name:'Ekmek',       icon:'🍞' },
   feather:     { name:'Tüy',         icon:'🪶' },
   wool:        { name:'Yün',         icon:'🧶' },
   knife:       { name:'Bıçak',       icon:'🔪' },
@@ -749,6 +751,14 @@ function inSafe(e){ return dist(e, campfire) < campfire.light; }
 // ---------- Inventory ----------
 function addItem(id, qty) {
   qty = qty || 1;
+  // tools don't stack — each pushed as its own slot with full durability
+  if (TOOL_DUR && TOOL_DUR[id] !== undefined) {
+    for (var n = 0; n < qty; n++) {
+      if (player.inv.length >= 8) { renderInv(); return n > 0; }
+      player.inv.push({ id:id, qty:1, dur: TOOL_DUR[id] });
+    }
+    renderInv(); return true;
+  }
   for (var i = 0; i < player.inv.length; i++) {
     if (player.inv[i].id === id) { player.inv[i].qty += qty; renderInv(); return true; }
   }
@@ -785,6 +795,22 @@ function giveOrDrop(id, qty, x, y) {
   return true;
 }
 function getTool() { return player.inv[player.sel] ? player.inv[player.sel].id : null; }
+// tool durability — max uses before breaking. tools never stack.
+var TOOL_DUR = { knife:30, axe:50, pickaxe:60, sword:80, bow:100, shears:40, rod:50, hoe:40 };
+function isTool(id) { return TOOL_DUR[id] !== undefined; }
+function useTool(amount) {
+  amount = amount || 1;
+  var slot = player.inv[player.sel];
+  if (!slot || !isTool(slot.id)) return;
+  if (slot.dur === undefined) slot.dur = TOOL_DUR[slot.id];
+  slot.dur -= amount;
+  if (slot.dur <= 0) {
+    showMsg('💥 ' + ITEMS[slot.id].name + ' kırıldı');
+    player.inv.splice(player.sel, 1);
+    if (player.sel >= player.inv.length) player.sel = Math.max(0, player.inv.length - 1);
+  }
+  renderInv();
+}
 
 function renderInv() {
   var el = document.getElementById('inv');
@@ -794,9 +820,18 @@ function renderInv() {
     d.className = 'slot' + (i === player.sel ? ' sel' : '');
     var it = player.inv[i];
     var html = '<span class="k">' + (i+1) + '</span>';
-    if (it) html += ITEMS[it.id].icon + '<span class="qty">' + it.qty + '</span>';
+    if (it) {
+      html += ITEMS[it.id].icon + '<span class="qty">' + it.qty + '</span>';
+      if (isTool(it.id) && it.dur !== undefined) {
+        var pct = Math.max(0, it.dur / TOOL_DUR[it.id]);
+        var barColor = pct > 0.5 ? '#6dd07a' : pct > 0.25 ? '#ffb86b' : '#e15a5a';
+        html += '<div class="durbar" style="background:' + barColor + ';width:' + (pct*100) + '%"></div>';
+      }
+    }
     d.innerHTML = html;
-    if (it) d.title = ITEMS[it.id].name;
+    if (it) {
+      d.title = ITEMS[it.id].name + (isTool(it.id) ? ' (' + (it.dur !== undefined ? it.dur : TOOL_DUR[it.id]) + '/' + TOOL_DUR[it.id] + ')' : '');
+    }
     (function(idx){
       d.onclick = function(){
         var was = player.sel;
@@ -830,7 +865,8 @@ var RECIPES = [
   { id:'furnace', name:'Fırın',          cost:{stone:10, iron_raw:3, coal:10},needTable:true, place:true },
   // smelting (needs furnace nearby)
   { id:'iron',    name:'Demir (eritim)', cost:{iron_raw:1, coal:1},           needFurnace:true },
-  { id:'gold',    name:'Altın (eritim)', cost:{gold_raw:1, coal:1},           needFurnace:true }
+  { id:'gold',    name:'Altın (eritim)', cost:{gold_raw:1, coal:1},           needFurnace:true },
+  { id:'bread',   name:'Ekmek',          cost:{wheat:3},                      needFurnace:true }
 ];
 
 function renderCraft() {
@@ -864,7 +900,15 @@ document.getElementById('craft').addEventListener('click', function(e) {
   if (!t || !t.dataset.r) return;
   if (t.classList.contains('off')) return;
   var r = RECIPES[parseInt(t.dataset.r)];
-  if (r) craft(r);
+  if (!r) return;
+  var times = e.ctrlKey ? 10 : (e.shiftKey ? 5 : 1);
+  for (var i = 0; i < times; i++) {
+    // verify each iteration so we stop when ingredients run out
+    var canDo = true;
+    for (var k in r.cost) if (countItem(k) < r.cost[k]) { canDo = false; break; }
+    if (!canDo) break;
+    craft(r);
+  }
 });
 function hasTableNear() {
   for (var i = 0; i < placed.length; i++)
@@ -975,34 +1019,45 @@ function renderMerchantUI() {
     var div = document.createElement('div'); div.className = 'trade';
     var q = it.qty || 1;
     div.innerHTML = '<span>' + ITEMS[it.id].icon + ' ' + ITEMS[it.id].name + (q>1?' x'+q:'') + '</span>' +
-                    '<span>' + it.price + '🪙 <button data-buy="' + it.id + '">AL</button></span>';
+                    '<span>' + it.price + '🪙 <button data-buy="' + it.id + '" data-price="' + it.price + '" data-qty="' + q + '">AL</button></span>';
     var btn = div.querySelector('button');
     btn.disabled = gold < it.price;
-    btn.onclick = function() {
-      if (countItem('gold') < it.price) return;
-      removeItem('gold', it.price);
-      if (!addItem(it.id, q)) { addItem('gold', it.price); showMsg('⚠ Envanter dolu'); return; }
-      if (window.__sfxCraft) window.__sfxCraft();
-      renderMerchantUI();
-    };
     shop.appendChild(div);
   });
   MERCHANT_BUYS.forEach(function(it) {
     var have = countItem(it.id);
     var div = document.createElement('div'); div.className = 'trade';
     div.innerHTML = '<span>' + ITEMS[it.id].icon + ' ' + ITEMS[it.id].name + ' <span style="color:#777">(' + have + ')</span></span>' +
-                    '<span>' + it.price + '🪙 <button data-sell="' + it.id + '">SAT</button></span>';
+                    '<span>' + it.price + '🪙 <button data-sell="' + it.id + '" data-price="' + it.price + '">SAT</button></span>';
     var btn = div.querySelector('button');
     btn.disabled = have < 1;
-    btn.onclick = function() {
-      if (countItem(it.id) < 1) return;
-      removeItem(it.id, 1); addItem('gold', it.price);
-      if (window.__sfxCraft) window.__sfxCraft();
-      renderMerchantUI();
-    };
     buy.appendChild(div);
   });
 }
+// event delegation on merchantUI — survives DOM rebuilds so rapid clicks all register
+document.getElementById('merchantUI').addEventListener('click', function(e) {
+  var btn = e.target;
+  if (!btn || !btn.dataset) return;
+  var times = e.ctrlKey ? 10 : (e.shiftKey ? 5 : 1);
+  if (btn.dataset.buy) {
+    var id = btn.dataset.buy, price = parseInt(btn.dataset.price), q = parseInt(btn.dataset.qty) || 1;
+    for (var i = 0; i < times; i++) {
+      if (countItem('gold') < price) break;
+      removeItem('gold', price);
+      if (!addItem(id, q)) { addItem('gold', price); showMsg('⚠ Envanter dolu'); break; }
+      if (window.__sfxCraft) window.__sfxCraft();
+    }
+    renderMerchantUI();
+  } else if (btn.dataset.sell) {
+    var id = btn.dataset.sell, price = parseInt(btn.dataset.price);
+    for (var i = 0; i < times; i++) {
+      if (countItem(id) < 1) break;
+      removeItem(id, 1); addItem('gold', price);
+      if (window.__sfxCraft) window.__sfxCraft();
+    }
+    renderMerchantUI();
+  }
+});
 window.__closeMerchant = function() {
   document.getElementById('merchantUI').classList.remove('open');
 };
@@ -1083,7 +1138,7 @@ var FOOD = {
   fish_raw:    { hu: 12, hp: -3, msg: '🐟 Çiğ balık (+12, -3)' },
   potato_cooked:{hu: 22, hp: 2,  msg: '🍟 Pişmiş patates (+22, +2)' },
   carrot_cooked:{hu: 18, hp: 3,  msg: '🥘 Pişmiş havuç (+18, +3)' },
-  wheat:       { hu: 10, hp: 0,  msg: '🌾 Buğday (+10)' }
+  bread:       { hu: 38, hp: 6,  msg: '🍞 Ekmek (+38, +6)' }
 };
 function eatItem(id) {
   if (!FOOD[id] || countItem(id) < 1) return false;
@@ -1135,6 +1190,7 @@ function interact(wp) {
     }
     placed.push({ kind:'farmland', x: wp.x, y: wp.y, r: 18, crop: null, growth: 0, watered: false });
     player.hitCool = 0.3;
+    useTool();
     if (window.__sfxHit) window.__sfxHit();
     return;
   }
@@ -1169,6 +1225,7 @@ function interact(wp) {
       life: 2.4, dmg: 2, kind:'arrow', fric: 0.992
     });
     player.face = ang; player.hitCool = 0.18;
+    useTool();
     if (window.__sfxHit) window.__sfxHit();
     return;
   }
@@ -1185,7 +1242,10 @@ function interact(wp) {
   // drop pickup if very close to click
   for (var i = drops.length - 1; i >= 0; i--) {
     if (dist(drops[i], wp) < 22 && dist(drops[i], player) < 55) {
-      addItem(drops[i].id, drops[i].qty); drops.splice(i, 1); return;
+      if ((drops[i].pickupCool || 0) > 0) return; // still cooling down — don't pick up
+      if (addItem(drops[i].id, drops[i].qty)) { drops.splice(i, 1); }
+      else { showMsg('⚠ Envanter dolu'); }
+      return;
     }
   }
   var tool = getTool();
@@ -1235,6 +1295,7 @@ function interact(wp) {
     if ((best.growth || 1) < 1) { showMsg('🌱 Henüz büyümedi'); return; }
     var dmg = tool === 'axe' ? 2 : (tool === 'stone' || tool === 'knife') ? 1 : 0.4;
     best.hp -= dmg;
+    if (isTool(tool)) useTool();
     burst(best.x, best.y, '#3a5a2a', 4);
     if (best.hp <= 0) {
       drops.push({x:best.x,y:best.y,id:'wood',qty:2});
@@ -1244,11 +1305,13 @@ function interact(wp) {
   } else if (bestType === 'stone') {
     var dmg = (tool === 'stone' || tool === 'axe') ? 1 : 0.3;
     best.hp -= dmg;
+    if (isTool(tool)) useTool();
     burst(best.x, best.y, '#aaa', 4);
     if (best.hp <= 0) { drops.push({x:best.x,y:best.y,id:'stone',qty:2}); stones.splice(stones.indexOf(best),1); }
   } else if (bestType === 'rabbit') {
     var dmg = tool === 'knife' ? 3 : tool === 'axe' ? 2 : 1;
     best.hp -= dmg; best.fT = 4;
+    if (isTool(tool)) useTool();
     burst(best.x, best.y, '#d44', 5);
     if (best.hp <= 0) { drops.push({x:best.x,y:best.y,id:'meat_raw',qty:1}); rabbits.splice(rabbits.indexOf(best),1); }
   } else if (bestType === 'iron') {
@@ -1257,6 +1320,7 @@ function interact(wp) {
     }
     var dmg = tool === 'pickaxe' ? 2 : 1;
     best.hp -= dmg;
+    useTool();
     burst(best.x, best.y, '#b08060', 4);
     if (best.hp <= 0) {
       drops.push({x:best.x, y:best.y, id:'iron_raw', qty:2});
@@ -1267,6 +1331,7 @@ function interact(wp) {
       showMsg('⛏ Altın için kazma lazım'); return;
     }
     best.hp -= 1;
+    useTool();
     burst(best.x, best.y, '#ffd040', 5);
     if (best.hp <= 0) {
       drops.push({x:best.x, y:best.y, id:'gold_raw', qty:1});
@@ -1278,6 +1343,7 @@ function interact(wp) {
     }
     var dmg = tool === 'pickaxe' ? 2 : 1;
     best.hp -= dmg;
+    useTool();
     burst(best.x, best.y, '#222', 4);
     if (best.hp <= 0) {
       drops.push({x:best.x, y:best.y, id:'coal', qty:2});
@@ -1312,6 +1378,7 @@ function interact(wp) {
   } else if (bestType === 'chicken') {
     var dmg = tool === 'knife' ? 3 : tool === 'axe' ? 2 : 1;
     best.hp -= dmg; best.fT = 4;
+    if (isTool(tool)) useTool();
     burst(best.x, best.y, '#d44', 5);
     if (best.hp <= 0) {
       drops.push({x:best.x,y:best.y,id:'meat_raw',qty:1});
@@ -1322,12 +1389,14 @@ function interact(wp) {
     if (tool === 'shears' && best.wool) {
       best.wool = false;
       drops.push({x:best.x,y:best.y,id:'wool',qty:Math.ceil(2*diff.foodMult)});
+      useTool();
       burst(best.x, best.y, '#fff', 5);
       showMsg('✂ Yün kırpıldı');
       return;
     }
     var dmg = tool === 'knife' ? 3 : tool === 'axe' ? 2 : 1;
     best.hp -= dmg; best.fT = 4;
+    if (isTool(tool)) useTool();
     burst(best.x, best.y, '#d44', 5);
     if (best.hp <= 0) {
       drops.push({x:best.x,y:best.y,id:'meat_raw',qty:Math.ceil(2*diff.foodMult)});
@@ -1337,10 +1406,12 @@ function interact(wp) {
   } else if (bestType === 'zombie') {
     var dmg = tool === 'sword' ? 6 : tool === 'spear' ? 3 : tool === 'knife' ? 3 : tool === 'axe' ? 4 : tool === 'stone' ? 1.5 : 0.5;
     best.hp -= dmg;
+    if (isTool(tool)) useTool();
     burst(best.x, best.y, '#6dd07a', 6);
   } else if (bestType === 'wolf' || bestType === 'bear') {
     var dmg = tool === 'sword' ? 6 : tool === 'spear' ? 3 : tool === 'knife' ? 3 : tool === 'axe' ? 4 : tool === 'stone' ? 1.5 : 0.5;
     best.hp -= dmg;
+    if (isTool(tool)) useTool();
     burst(best.x, best.y, '#d44', 6);
     if (best.hp <= 0) {
       var meatQty = (bestType==='wolf' ? 2 : 3);
@@ -1397,46 +1468,19 @@ function aiRabbit(r, dt) {
   r.x = clamp(r.x, 5, WORLD_W-5); r.y = clamp(r.y, 5, WORLD_H-5);
 }
 function aiHunter(p, dt) {
-  var pSafe = inSafe(player), eSafe = inSafe(p), dp = dist(p, player);
-  if (!pSafe && dp < p.vision && !eSafe) {
-    // chase with tangent detour around campfire
+  var dp = dist(p, player);
+  if (dp < p.vision) {
+    // straight-line chase — mobs ignore the campfire safe zone now
     var dx = player.x - p.x, dy = player.y - p.y, d = Math.sqrt(dx*dx+dy*dy)||1;
-    var nx, ny;
-    // check if direct line passes through safe zone
-    var safeR = campfire.light + p.r + 4;
-    var cx = campfire.x - p.x, cy = campfire.y - p.y;
-    var dCamp = Math.sqrt(cx*cx + cy*cy);
-    var proj = (cx*dx + cy*dy) / d; // projection of campfire onto path
-    var perpD = Math.abs(cx*(-dy) + cy*dx) / d; // perpendicular distance
-    if (proj > 0 && proj < d + safeR && perpD < safeR && dCamp > safeR * 0.6) {
-      // tangent direction — perpendicular to (p -> campfire), choose side closer to player
-      var tx = -cy/dCamp, ty = cx/dCamp;
-      if (tx*dx + ty*dy < 0) { tx = -tx; ty = -ty; }
-      nx = p.x + tx * p.speed * dt;
-      ny = p.y + ty * p.speed * dt;
-    } else {
-      nx = p.x + dx/d * p.speed * dt;
-      ny = p.y + dy/d * p.speed * dt;
-    }
-    // hard guard: never enter safe zone
-    var ddn = Math.sqrt((nx-campfire.x)*(nx-campfire.x)+(ny-campfire.y)*(ny-campfire.y));
-    if (ddn < safeR) {
-      var a = Math.atan2(ny-campfire.y, nx-campfire.x);
-      nx = campfire.x + Math.cos(a)*safeR;
-      ny = campfire.y + Math.sin(a)*safeR;
-    }
-    p.x = nx; p.y = ny;
+    p.x = p.x + dx/d * p.speed * dt;
+    p.y = p.y + dy/d * p.speed * dt;
     p.aT -= dt;
-    if (dp < p.r + player.r + 4 && p.aT <= 0 && !pSafe) {
+    if (dp < p.r + player.r + 4 && p.aT <= 0) {
       player.hp -= p.dmg * diff.dmgMult; player.dmgCool = .25;
       if (window.__sfxHurt) window.__sfxHurt();
       burst(player.x, player.y, '#e15a5a', 6);
       p.aT = 1.0;
     }
-  } else if (eSafe) {
-    var a = Math.atan2(p.y-campfire.y, p.x-campfire.x);
-    p.x = campfire.x + Math.cos(a)*(campfire.light+p.r+2);
-    p.y = campfire.y + Math.sin(a)*(campfire.light+p.r+2);
   } else {
     p.wT -= dt;
     var pdx = p.tx - p.x, pdy = p.ty - p.y;
@@ -2071,15 +2115,39 @@ function draw() {
       setFont(10); ctx.fillStyle = '#ffb86b';
       ctx.fillText('FIRIN', p.x, p.y + 28);
     } else if (p.kind === 'torch') {
-      // stick
-      ctx.fillStyle = '#5a3a18';
-      ctx.fillRect(p.x - 1.5, p.y - 4, 3, 14);
-      // flame
-      var fs = 5 + Math.sin(t*10 + p.x) * 1.5;
-      ctx.fillStyle = '#ff8030';
-      ctx.beginPath(); ctx.arc(p.x, p.y - 6, fs, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = '#ffd060';
-      ctx.beginPath(); ctx.arc(p.x, p.y - 6, fs*0.5, 0, Math.PI*2); ctx.fill();
+      // pole
+      ctx.fillStyle = '#3a2410';
+      ctx.fillRect(p.x - 2, p.y - 2, 4, 18);
+      // wrap binding (cloth strip)
+      ctx.fillStyle = '#8a4a20';
+      ctx.fillRect(p.x - 4, p.y - 8, 8, 5);
+      ctx.fillStyle = '#5a2810';
+      ctx.fillRect(p.x - 4, p.y - 5, 8, 1);
+      // ember base (dark coal lump on top)
+      ctx.fillStyle = '#1a0a05';
+      ctx.beginPath(); ctx.ellipse(p.x, p.y - 10, 5, 3, 0, 0, Math.PI*2); ctx.fill();
+      // flame — layered, flickers
+      var fs = 5 + Math.sin(t*9 + p.x*0.1) * 1.4;
+      var fl = 7 + Math.sin(t*11 + p.x*0.07) * 1.6;
+      // outer orange flame
+      ctx.fillStyle = 'rgba(255,128,40,0.85)';
+      ctx.beginPath();
+      ctx.moveTo(p.x - fs*0.7, p.y - 9);
+      ctx.quadraticCurveTo(p.x - fs, p.y - 12, p.x, p.y - 14 - fl);
+      ctx.quadraticCurveTo(p.x + fs, p.y - 12, p.x + fs*0.7, p.y - 9);
+      ctx.quadraticCurveTo(p.x, p.y - 6, p.x - fs*0.7, p.y - 9);
+      ctx.fill();
+      // inner yellow flame
+      ctx.fillStyle = 'rgba(255,210,80,0.95)';
+      ctx.beginPath();
+      ctx.moveTo(p.x - fs*0.4, p.y - 10);
+      ctx.quadraticCurveTo(p.x - fs*0.5, p.y - 12, p.x, p.y - 13 - fl*0.7);
+      ctx.quadraticCurveTo(p.x + fs*0.5, p.y - 12, p.x + fs*0.4, p.y - 10);
+      ctx.quadraticCurveTo(p.x, p.y - 8, p.x - fs*0.4, p.y - 10);
+      ctx.fill();
+      // bright core
+      ctx.fillStyle = 'rgba(255,255,200,0.9)';
+      ctx.beginPath(); ctx.arc(p.x, p.y - 11, fs * 0.35, 0, Math.PI*2); ctx.fill();
     } else if (p.kind === 'farmland') {
       // dirt patch
       ctx.fillStyle = '#5a3818';
@@ -2333,23 +2401,26 @@ function draw() {
   if (darkness > 0) {
     ctx.fillStyle = 'rgba(10, 20, 50, ' + darkness + ')';
     ctx.fillRect(0, 0, W, H);
-    // punch holes for placed torches + held torch
+    // additive warm glow for torches (composite='lighter' adds light on top of darkness)
     ctx.save();
-    ctx.globalCompositeOperation = 'destination-out';
-    function punchLight(wx, wy, radius) {
+    ctx.globalCompositeOperation = 'lighter';
+    function torchLight(wx, wy, radius) {
       var lx = wx - view.x, ly = wy - view.y;
       if (lx < -radius || lx > W + radius || ly < -radius || ly > H + radius) return;
       var grd = ctx.createRadialGradient(lx, ly, 4, lx, ly, radius);
-      grd.addColorStop(0,    'rgba(255,210,120,1)');
-      grd.addColorStop(0.55, 'rgba(255,210,120,0.7)');
-      grd.addColorStop(1,    'rgba(255,210,120,0)');
+      // strong warm yellow at center, fades to nothing — 'lighter' adds it to the dark blue
+      grd.addColorStop(0,    'rgba(255,200,90,0.85)');
+      grd.addColorStop(0.45, 'rgba(255,160,60,0.45)');
+      grd.addColorStop(1,    'rgba(255,160,60,0)');
       ctx.fillStyle = grd;
       ctx.beginPath(); ctx.arc(lx, ly, radius, 0, Math.PI*2); ctx.fill();
     }
     for (var ti = 0; ti < placed.length; ti++) {
-      if (placed[ti].kind === 'torch') punchLight(placed[ti].x, placed[ti].y, 120);
+      if (placed[ti].kind === 'torch') torchLight(placed[ti].x, placed[ti].y, 120);
     }
-    if (getTool() === 'torch') punchLight(player.x, player.y, 130);
+    if (getTool() === 'torch') torchLight(player.x, player.y, 130);
+    // campfire glow at night too
+    torchLight(campfire.x, campfire.y, 180);
     ctx.restore();
   }
 
@@ -2439,6 +2510,20 @@ function stopFishing(won) {
   var f = fishing.fishType;
   fishing = null;
   document.getElementById('fishUI').classList.remove('open');
+  // wear the rod once per attempt (success or fail)
+  for (var i = 0; i < player.inv.length; i++) {
+    if (player.inv[i].id === 'rod') {
+      if (player.inv[i].dur === undefined) player.inv[i].dur = TOOL_DUR.rod;
+      player.inv[i].dur--;
+      if (player.inv[i].dur <= 0) {
+        showMsg('💥 Olta kırıldı');
+        player.inv.splice(i, 1);
+        if (player.sel >= player.inv.length) player.sel = Math.max(0, player.inv.length - 1);
+      }
+      renderInv();
+      break;
+    }
+  }
   if (won) {
     addItem('fish_raw', f.q);
     showMsg('🐟 ' + f.name + ' yakaladın +' + f.q);
