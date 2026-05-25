@@ -228,6 +228,8 @@
   }
   #fishUI.open { display: block; }
   #fishUI h3 { color: #4aa0e0; margin-bottom: 8px; font-size: 14px; }
+  #fishUI .close { position: absolute; top: 6px; right: 8px; background: transparent; border: 0; color: #888; font-size: 18px; cursor: pointer; }
+  #fishUI .close:hover { color: #fff; }
   #fishBar {
     position: relative; width: 50px; height: 280px; background: #0a1a25;
     border: 2px solid #2a4055; margin: 12px auto; border-radius: 4px; overflow: hidden;
@@ -415,7 +417,8 @@
       🌱 sağ tık → ek &nbsp; 📦 → aç &nbsp; 🛏 → uyu (gece)
     </div>
     <div id="fishUI">
-      <h3>🎣 BALIK YAKALA</h3>
+      <button class="close" onclick="window.__cancelFishing()">✕</button>
+      <h3>🎣 BALIK YAKALA <span id="fishTime" style="float:right;color:#ffb86b;font-size:11px">18s</span></h3>
       <div id="fishBar">
         <div id="fishZone"></div>
         <div id="fishMark"></div>
@@ -487,7 +490,7 @@
 var cv = document.getElementById('cv');
 var ctx = cv.getContext('2d');
 var W = 1200, H = 800;
-var WORLD_W = 3600, WORLD_H = 2400;
+var WORLD_W = 5400, WORLD_H = 3600;
 var view = { x: 0, y: 0, scale: 1 };
 
 function computeView() {
@@ -535,6 +538,8 @@ var ITEMS = {
   meat_cooked: { name:'Pişmiş Et',   icon:'🍖' },
   fish_raw:    { name:'Çiğ Balık',   icon:'🐟' },
   fish_cooked: { name:'Pişmiş Balık',icon:'🍣' },
+  potato_cooked:{name:'Pişmiş Patates',icon:'🍟' },
+  carrot_cooked:{name:'Pişmiş Havuç',icon:'🥘' },
   feather:     { name:'Tüy',         icon:'🪶' },
   wool:        { name:'Yün',         icon:'🧶' },
   knife:       { name:'Bıçak',       icon:'🔪' },
@@ -555,9 +560,9 @@ var ITEMS = {
   bed:         { name:'Yatak',       icon:'🛏' },
   table:       { name:'Çal. Masası', icon:'🔨' },
   furnace:     { name:'Fırın',       icon:'🔥' },
-  seed_potato: { name:'Patates Tohumu', icon:'🥔' },
-  seed_carrot: { name:'Havuç Tohumu',   icon:'🥕' },
-  seed_wheat:  { name:'Buğday Tohumu',  icon:'🌾' },
+  seed_potato: { name:'Patates Tohumu', icon:'🟤', custom:'seed_potato' },
+  seed_carrot: { name:'Havuç Tohumu',   icon:'🟠', custom:'seed_carrot' },
+  seed_wheat:  { name:'Buğday Tohumu',  icon:'🟡', custom:'seed_wheat' },
   potato:      { name:'Patates',     icon:'🥔' },
   carrot:      { name:'Havuç',       icon:'🥕' },
   wheat:       { name:'Buğday',      icon:'🌾' }
@@ -641,14 +646,14 @@ function buildWorld() {
   merchant = null; nextMerchantDay = 3;
   fog = new Uint8Array(FOG_W * FOG_H);
   // lakes FIRST so everything else can avoid them
-  for (var i = 0; i < 2; i++) {
+  for (var i = 0; i < 4; i++) {
     var p, t = 0;
     do { p = { x: rand(200, WORLD_W-200), y: rand(200, WORLD_H-200) }; t++; }
     while (dist(p, campfire) < 300 && t < 20);
     lakes.push({ x:p.x, y:p.y, rx: rand(70, 110), ry: rand(50, 80) });
   }
   // trees
-  for (var i = 0; i < 45; i++) {
+  for (var i = 0; i < 90; i++) {
     var p, t = 0;
     do { p = { x: rand(40, WORLD_W-40), y: rand(40, WORLD_H-40) }; t++; }
     while ((dist(p, campfire) < 130 || inLake(p.x, p.y, 18)) && t < 30);
@@ -656,7 +661,7 @@ function buildWorld() {
     trees.push({ x:p.x, y:p.y, hp:3, hpMax:3, r:18, sway:Math.random()*6, growth:1 });
   }
   // stones
-  for (var i = 0; i < 28; i++) {
+  for (var i = 0; i < 55; i++) {
     var p, t = 0;
     do { p = { x: rand(40, WORLD_W-40), y: rand(40, WORLD_H-40) }; t++; }
     while ((dist(p, campfire) < 110 || inLake(p.x, p.y, 14)) && t < 30);
@@ -664,7 +669,7 @@ function buildWorld() {
     stones.push({ x:p.x, y:p.y, hp:3, hpMax:3, r:14 });
   }
   // iron ore (need axe to mine)
-  for (var i = 0; i < 12; i++) {
+  for (var i = 0; i < 24; i++) {
     var p, t = 0;
     do { p = { x: rand(60, WORLD_W-60), y: rand(60, WORLD_H-60) }; t++; }
     while ((dist(p, campfire) < 180 || inLake(p.x, p.y, 16)) && t < 30);
@@ -672,7 +677,7 @@ function buildWorld() {
     ironOres.push({ x:p.x, y:p.y, hp:5, hpMax:5, r:16 });
   }
   // gold ore (need pickaxe to mine, rarer)
-  for (var i = 0; i < 5; i++) {
+  for (var i = 0; i < 10; i++) {
     var p, t = 0;
     do { p = { x: rand(80, WORLD_W-80), y: rand(80, WORLD_H-80) }; t++; }
     while ((dist(p, campfire) < 260 || inLake(p.x, p.y, 16)) && t < 30);
@@ -680,7 +685,7 @@ function buildWorld() {
     goldOres.push({ x:p.x, y:p.y, hp:6, hpMax:6, r:16 });
   }
   // coal ore
-  for (var i = 0; i < 15; i++) {
+  for (var i = 0; i < 30; i++) {
     var p, t = 0;
     do { p = { x: rand(60, WORLD_W-60), y: rand(60, WORLD_H-60) }; t++; }
     while ((dist(p, campfire) < 150 || inLake(p.x, p.y, 14)) && t < 30);
@@ -688,7 +693,7 @@ function buildWorld() {
     coalOres.push({ x:p.x, y:p.y, hp:4, hpMax:4, r:14 });
   }
   // grass tufts (scattered, break for seeds)
-  for (var i = 0; i < 80; i++) {
+  for (var i = 0; i < 160; i++) {
     var p = { x: rand(40, WORLD_W-40), y: rand(40, WORLD_H-40) };
     if (inLake(p.x, p.y, 8)) continue;
     grasses.push({ x:p.x, y:p.y, r:10 });
@@ -767,6 +772,18 @@ function countItem(id) {
   for (var i = 0; i < player.inv.length; i++) if (player.inv[i].id === id) return player.inv[i].qty;
   return 0;
 }
+// give qty of id to player; if inventory is full, the overflow falls on the ground at (x,y) instead of vanishing.
+// returns true if at least one ended up somewhere (inv or ground).
+function giveOrDrop(id, qty, x, y) {
+  qty = qty || 1;
+  if (addItem(id, qty)) return true;
+  // inv full → drop on ground at given position (or near player)
+  x = (x === undefined) ? player.x + rand(-12, 12) : x;
+  y = (y === undefined) ? player.y + rand(-12, 12) : y;
+  drops.push({ x: x, y: y, id: id, qty: qty });
+  if (!invFullWarned) { showMsg('⚠ Envanter dolu — yere düştü'); invFullWarned = true; setTimeout(function(){ invFullWarned = false; }, 3000); }
+  return true;
+}
 function getTool() { return player.inv[player.sel] ? player.inv[player.sel].id : null; }
 
 function renderInv() {
@@ -807,7 +824,6 @@ var RECIPES = [
   { id:'sword',   name:'Demir Kılıç',    cost:{iron:3, wood:1},               needTable:true },
   { id:'shears',  name:'Makas',          cost:{iron:2, wood:1},               needTable:true },
   { id:'hoe',     name:'Çapa',           cost:{iron:1, wood:2},               needTable:true },
-  { id:'bucket',  name:'Kova',           cost:{iron:5},                       needTable:true },
   { id:'torch',   name:'Meşale x2',      cost:{wood:1, coal:1},               needTable:true, qty:2 },
   { id:'chest',   name:'Sandık',         cost:{wood:6, iron:1},               needTable:true, place:true },
   { id:'bed',     name:'Yatak',          cost:{wood:6, feather:3, wool:2},    needTable:true, place:true },
@@ -870,7 +886,7 @@ function craft(r) {
     showMsg('✓ ' + ITEMS[r.id].name + ' yerleştirildi');
   } else {
     var q = r.qty || 1;
-    addItem(r.id, q);
+    giveOrDrop(r.id, q);
     showMsg('✓ ' + (q > 1 ? q + 'x ' : '') + ITEMS[r.id].name + ' üretildi');
   }
   if (window.__sfxCraft) window.__sfxCraft();
@@ -920,9 +936,9 @@ function dropSelected() {
   var id = it.id;
   removeItem(id, 1);
   drops.push({
-    x: player.x + Math.cos(player.face)*22 + rand(-6,6),
-    y: player.y + Math.sin(player.face)*22 + rand(-6,6),
-    id: id, qty: 1
+    x: player.x + Math.cos(player.face)*60 + rand(-8,8),
+    y: player.y + Math.sin(player.face)*60 + rand(-8,8),
+    id: id, qty: 1, pickupCool: 1.0
   });
   showMsg('🗑 ' + ITEMS[id].name + ' bırakıldı');
 }
@@ -933,7 +949,6 @@ var MERCHANT_SHOP = [
   { id:'sword',       price:8 },
   { id:'iron',        price:3 },
   { id:'arrow',       price:1, qty:3 },
-  { id:'bucket',      price:5 },
   { id:'hoe',         price:4 },
   { id:'seed_potato', price:1 },
   { id:'seed_carrot', price:1 },
@@ -1047,13 +1062,18 @@ function renderChestUI() {
 function cook() {
   if (dist(player, campfire) > 80) { showMsg('🔥 Kamp ateşinin yanına gel'); return; }
   var nm = countItem('meat_raw'), nf = countItem('fish_raw');
-  if (nm + nf < 1) { showMsg('Çiğ et/balık yok'); return; }
+  var np = countItem('potato'), nc = countItem('carrot');
+  if (nm + nf + np + nc < 1) { showMsg('Pişirilecek bir şey yok'); return; }
   if (nm > 0) { removeItem('meat_raw', nm); addItem('meat_cooked', nm); }
   if (nf > 0) { removeItem('fish_raw', nf); addItem('fish_cooked', nf); }
+  if (np > 0) { removeItem('potato', np); addItem('potato_cooked', np); }
+  if (nc > 0) { removeItem('carrot', nc); addItem('carrot_cooked', nc); }
   burst(campfire.x, campfire.y-6, '#ffb86b', 12);
   var msg = [];
   if (nm > 0) msg.push('🍖 ' + nm + ' et');
   if (nf > 0) msg.push('🍣 ' + nf + ' balık');
+  if (np > 0) msg.push('🍟 ' + np + ' patates');
+  if (nc > 0) msg.push('🥘 ' + nc + ' havuç');
   showMsg(msg.join(', ') + ' pişti');
 }
 var FOOD = {
@@ -1061,8 +1081,8 @@ var FOOD = {
   fish_cooked: { hu: 28, hp: 8,  msg: '🍣 Doydun (+28, +8)'  },
   meat_raw:    { hu: 15, hp: -5, msg: '🥩 Çiğ yedin (+15, -5)' },
   fish_raw:    { hu: 12, hp: -3, msg: '🐟 Çiğ balık (+12, -3)' },
-  potato:      { hu: 18, hp: 0,  msg: '🥔 Patates (+18)' },
-  carrot:      { hu: 14, hp: 2,  msg: '🥕 Havuç (+14, +2)' },
+  potato_cooked:{hu: 22, hp: 2,  msg: '🍟 Pişmiş patates (+22, +2)' },
+  carrot_cooked:{hu: 18, hp: 3,  msg: '🥘 Pişmiş havuç (+18, +3)' },
   wheat:       { hu: 10, hp: 0,  msg: '🌾 Buğday (+10)' }
 };
 function eatItem(id) {
@@ -1085,7 +1105,7 @@ function eatMeat(which) {
 
 function interact(wp) {
   if (player.hitCool > 0 || fishing) return;
-  // chest open / bed sleep
+  // chest open / bed sleep / torch pickup
   for (var i = 0; i < placed.length; i++) {
     var pp = placed[i];
     if (pp.kind === 'chest' && dist(pp, wp) < 28 && dist(pp, player) < 70) {
@@ -1094,38 +1114,15 @@ function interact(wp) {
     if (pp.kind === 'bed' && dist(pp, wp) < 30 && dist(pp, player) < 70) {
       trySleep(pp); return;
     }
+    if (pp.kind === 'torch' && dist(pp, wp) < 16 && dist(pp, player) < 60) {
+      if (giveOrDrop('torch', 1, pp.x, pp.y)) {
+        placed.splice(i, 1);
+        showMsg('🕯 Meşale alındı');
+      }
+      return;
+    }
   }
   var tool0 = getTool();
-  // bucket: fill at lake / place water
-  if (tool0 === 'bucket') {
-    // near a lake? fill it
-    for (var i = 0; i < lakes.length; i++) {
-      var L = lakes[i];
-      var dx = (player.x - L.x) / L.rx, dy = (player.y - L.y) / L.ry;
-      if (dx*dx + dy*dy < 1.6) {
-        removeItem('bucket', 1); addItem('bucket_water', 1);
-        showMsg('💧 Kovayı doldurdun'); return;
-      }
-    }
-    showMsg('💧 Yakında göl yok'); return;
-  }
-  if (tool0 === 'bucket_water') {
-    // near farmland? water it
-    for (var i = 0; i < placed.length; i++) {
-      if (placed[i].kind === 'farmland' && dist(placed[i], wp) < 30 && dist(placed[i], player) < 60) {
-        placed[i].watered = true;
-        removeItem('bucket_water', 1); addItem('bucket', 1);
-        showMsg('💧 Sulandı (büyüme 2x)'); return;
-      }
-    }
-    // otherwise place a small water tile at click
-    if (dist(wp, player) < 60) {
-      placed.push({ kind:'water', x: wp.x, y: wp.y, r: 22 });
-      removeItem('bucket_water', 1); addItem('bucket', 1);
-      showMsg('💧 Su bırakıldı'); return;
-    }
-    return;
-  }
   // hoe: till grass / empty ground → farmland
   if (tool0 === 'hoe') {
     if (dist(wp, player) > 60) return;
@@ -1359,7 +1356,7 @@ function interact(wp) {
       else if (best.kind === 'campsite') pool = [{id:'wood',qty:4},{id:'meat_cooked',qty:1},{id:'knife',qty:1}];
       else pool = [{id:'wood',qty:3},{id:'stone',qty:2},{id:'knife',qty:1}];
       var L = pool[Math.floor(Math.random()*pool.length)];
-      addItem(L.id, L.qty);
+      giveOrDrop(L.id, L.qty, best.x, best.y);
       showMsg('📦 ' + L.qty + ' ' + ITEMS[L.id].name);
     } else { showMsg('Boş'); }
   }
@@ -1457,6 +1454,7 @@ function aiHunter(p, dt) {
 // ---------- Loop ----------
 var last = performance.now();
 var statT = 0, dayT = 0, day = 1, cookT = 0, craftT = 0, zombieSpawnT = 5, sleeping = false;
+var respawnT = 0;
 var dead = false; // unused now; respawn handles death
 
 function step(now) {
@@ -1626,7 +1624,8 @@ function update(dt) {
     var dr = drops[i];
     if (dr.age === undefined) dr.age = 0;
     dr.age += dt;
-    if (dist(dr, player) < player.r + 10) {
+    if (dr.pickupCool > 0) dr.pickupCool -= dt;
+    if ((dr.pickupCool || 0) <= 0 && dist(dr, player) < player.r + 10) {
       if (addItem(dr.id, dr.qty)) { drops.splice(i, 1); continue; }
       else { if (!invFullWarned) { showMsg('⚠ Envanter dolu (8/8)'); invFullWarned = true; setTimeout(function(){ invFullWarned = false; }, 3000); } }
     }
@@ -1644,6 +1643,28 @@ function update(dt) {
   // day timer (1 day = 90 seconds)
   dayT += dt;
   if (dayT >= DAY_LEN) { dayT = 0; day++; }
+
+  // resource respawn — checked every 60s game time
+  respawnT = (respawnT || 0) + dt;
+  if (respawnT >= 60) {
+    respawnT = 0;
+    var pad = 60;
+    function trySpawn(arr, count, build) {
+      for (var s = 0; s < count; s++) {
+        var p, t = 0;
+        do { p = { x: rand(pad, WORLD_W-pad), y: rand(pad, WORLD_H-pad) }; t++; }
+        while (t < 30 && (dist(p, campfire) < 150 || inLake(p.x, p.y, 20) ||
+          arr.some(function(e){ return dist(e, p) < 50; })));
+        if (!inLake(p.x, p.y, 20)) arr.push(build(p));
+      }
+    }
+    if (trees.length < 50)    trySpawn(trees,   12, function(p){ return {x:p.x,y:p.y,hp:3,hpMax:3,r:18,sway:Math.random()*6,growth:0.1}; });
+    if (stones.length < 25)   trySpawn(stones,   8, function(p){ return {x:p.x,y:p.y,hp:3,hpMax:3,r:14}; });
+    if (ironOres.length < 10) trySpawn(ironOres, 6, function(p){ return {x:p.x,y:p.y,hp:5,hpMax:5,r:16}; });
+    if (goldOres.length < 4)  trySpawn(goldOres, 3, function(p){ return {x:p.x,y:p.y,hp:6,hpMax:6,r:16}; });
+    if (coalOres.length < 12) trySpawn(coalOres, 8, function(p){ return {x:p.x,y:p.y,hp:4,hpMax:4,r:14}; });
+    if (grasses.length < 80)  trySpawn(grasses, 16, function(p){ return {x:p.x,y:p.y,r:10}; });
+  }
   // crops grow over time (placed farmland w/ crop) — full growth ~90s, half if not watered
   for (var ic = 0; ic < placed.length; ic++) {
     var pc = placed[ic];
@@ -1761,6 +1782,32 @@ function setFont(size) {
   if (_curFont !== f) { ctx.font = f; _curFont = f; }
 }
 function drawEmoji(x, y, e, size) { setFont(size); ctx.fillText(e, x, y); }
+function drawSeed(kind, x, y, size) {
+  // little pouch + seeds inside, colour-coded
+  var s = size * 0.4;
+  ctx.save();
+  // pouch
+  ctx.fillStyle = '#6b4a26';
+  ctx.beginPath(); ctx.arc(x, y + s*0.3, s, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#3a2814';
+  ctx.fillRect(x - s*0.5, y - s*0.6, s, s*0.4);
+  ctx.fillRect(x - s*0.55, y - s*0.55, s*1.1, 2);
+  // seeds
+  var col = kind === 'seed_potato' ? '#c8a07a' : kind === 'seed_carrot' ? '#ff8030' : '#ffe080';
+  ctx.fillStyle = col;
+  ctx.beginPath(); ctx.arc(x - s*0.25, y + s*0.25, s*0.18, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + s*0.20, y + s*0.10, s*0.18, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x - s*0.05, y + s*0.40, s*0.18, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+function drawItemIcon(id, x, y, size) {
+  var it = ITEMS[id]; if (!it) return;
+  if (it.custom && it.custom.indexOf('seed_') === 0) {
+    drawSeed(it.custom, x, y, size);
+  } else {
+    drawEmoji(x, y, it.icon, size);
+  }
+}
 var _safeGrad = null;
 function getSafeGrad() {
   if (_safeGrad) return _safeGrad;
@@ -2080,7 +2127,7 @@ function draw() {
     if (age > 290) {
       ctx.globalAlpha = 0.3 + 0.5 * Math.abs(Math.sin(age * 8));
     }
-    drawEmoji(d.x, d.y + bob, ITEMS[d.id].icon, 24);
+    drawItemIcon(d.id, d.x, d.y + bob, 24);
     if (d.qty > 1) {
       ctx.fillStyle = '#ffb86b'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center';
       ctx.fillText('x' + d.qty, d.x + 10, d.y + bob + 12);
@@ -2228,19 +2275,23 @@ function draw() {
   if (darkness > 0) {
     ctx.fillStyle = 'rgba(10, 20, 50, ' + darkness + ')';
     ctx.fillRect(0, 0, W, H);
-    // punch holes for torches
+    // punch holes for placed torches + held torch
     ctx.save();
     ctx.globalCompositeOperation = 'destination-out';
-    for (var ti = 0; ti < placed.length; ti++) {
-      if (placed[ti].kind !== 'torch') continue;
-      var tx = placed[ti].x - view.x, ty = placed[ti].y - view.y;
-      if (tx < -80 || tx > W + 80 || ty < -80 || ty > H + 80) continue;
-      var grd = ctx.createRadialGradient(tx, ty, 4, tx, ty, 80);
-      grd.addColorStop(0, 'rgba(255,200,80,1)');
-      grd.addColorStop(1, 'rgba(255,200,80,0)');
+    function punchLight(wx, wy, radius) {
+      var lx = wx - view.x, ly = wy - view.y;
+      if (lx < -radius || lx > W + radius || ly < -radius || ly > H + radius) return;
+      var grd = ctx.createRadialGradient(lx, ly, 4, lx, ly, radius);
+      grd.addColorStop(0,    'rgba(255,210,120,1)');
+      grd.addColorStop(0.55, 'rgba(255,210,120,0.7)');
+      grd.addColorStop(1,    'rgba(255,210,120,0)');
       ctx.fillStyle = grd;
-      ctx.beginPath(); ctx.arc(tx, ty, 80, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(lx, ly, radius, 0, Math.PI*2); ctx.fill();
     }
+    for (var ti = 0; ti < placed.length; ti++) {
+      if (placed[ti].kind === 'torch') punchLight(placed[ti].x, placed[ti].y, 120);
+    }
+    if (getTool() === 'torch') punchLight(player.x, player.y, 130);
     ctx.restore();
   }
 
@@ -2367,7 +2418,9 @@ function updateFishUI() {
   document.getElementById('fishZone').style.height = fishing.zoneSize + 'px';
   document.getElementById('fishMark').style.top = fishing.markY + 'px';
   document.getElementById('fishProgress').firstElementChild.style.width = fishing.progress + '%';
+  document.getElementById('fishTime').textContent = Math.max(0, Math.ceil(fishing.time)) + 's';
 }
+window.__cancelFishing = function() { if (fishing) stopFishing(false); };
 var fishBar = document.getElementById('fishBar');
 fishBar.addEventListener('mousedown', function(){ if (fishing) fishing.holding = true; });
 fishBar.addEventListener('mouseup',   function(){ if (fishing) fishing.holding = false; });
@@ -2463,9 +2516,9 @@ window.__goBack = function() {
   document.getElementById('creditPanel').classList.remove('show');
 };
 // ---------- Save / Load ----------
-var SAVE_KEY = 'inthewoods.save.v3';
+var SAVE_KEY = 'inthewoods.save.v4';
 // clear obsolete saves
-try { localStorage.removeItem('inthewoods.save.v1'); localStorage.removeItem('inthewoods.save.v2'); } catch(e){}
+try { ['v1','v2','v3'].forEach(function(v){ localStorage.removeItem('inthewoods.save.'+v); }); } catch(e){}
 function diffKey() {
   for (var k in DIFFS) if (DIFFS[k] === diff) return k;
   return 'normal';
@@ -2633,10 +2686,15 @@ window.__startGame = function(level) {
   showMsg('Zorluk: ' + diff.label);
 };
 
-// override step so it doesn't run until game starts
+// override step so it doesn't run until game starts, and pauses when ESC settings panel is open
 var _step = step;
+function isPaused() {
+  var sg = document.getElementById('settingsGame');
+  return sg && sg.classList.contains('open');
+}
 step = function(now) {
   if (!gameStarted) { last = now; requestAnimationFrame(step); return; }
+  if (isPaused()) { last = now; requestAnimationFrame(step); return; }
   _step(now);
 };
 
