@@ -919,6 +919,7 @@ function interact(wp) {
   var tool0 = getTool();
   // spear throw — ranged, heavy
   if (tool0 === 'spear') {
+    if (!removeItem('spear', 1)) return;
     var ang = Math.atan2(wp.y - player.y, wp.x - player.x);
     projectiles.push({
       x: player.x + Math.cos(ang)*16, y: player.y + Math.sin(ang)*16,
@@ -1296,7 +1297,11 @@ function update(dt) {
     pj.life -= dt;
     pj.x += pj.vx * dt; pj.y += pj.vy * dt;
     pj.vx *= 0.97; pj.vy *= 0.97;
-    if (pj.life <= 0) { projectiles.splice(i, 1); continue; }
+    if (pj.life <= 0) {
+      // landed without hitting — spear stays as a pickup, arrows are lost
+      if (pj.kind === 'spear') drops.push({ x: pj.x, y: pj.y, id: 'spear', qty: 1 });
+      projectiles.splice(i, 1); continue;
+    }
     function hitArr(arr, list, type) {
       for (var k = arr.length - 1; k >= 0; k--) {
         if (dist(arr[k], pj) < arr[k].r + 4) {
