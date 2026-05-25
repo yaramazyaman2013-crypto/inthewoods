@@ -78,6 +78,29 @@
     transition: all .15s;
   }
   #muteBtn:hover { background: rgba(0,0,0,0.9); border-color: #ffb86b; }
+  /* settings panel (both start & in-game) */
+  .settings {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    background: #1a1a1a; border: 2px solid #ffb86b; border-radius: 10px;
+    padding: 22px 30px; min-width: 320px; z-index: 300;
+    display: none; flex-direction: column; gap: 14px;
+    box-shadow: 0 10px 40px rgba(0,0,0,.8);
+  }
+  .settings.open { display: flex; }
+  .settings h2 { color: #ffb86b; font-size: 16px; letter-spacing: 3px; text-align: center; margin-bottom: 4px; }
+  .settings label { color: #ccc; font-size: 12px; display: flex; flex-direction: column; gap: 4px; }
+  .settings input[type=range] { width: 100%; accent-color: #ffb86b; }
+  .settings .row { display: flex; align-items: center; gap: 10px; }
+  .settings .diffsel { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .settings .diffsel button {
+    background: #2a2a2a; color: #ccc; border: 1px solid #444; padding: 8px;
+    font-size: 11px; font-weight: 600; letter-spacing: 1px; border-radius: 4px; cursor: pointer;
+  }
+  .settings .diffsel button.sel { background: #ffb86b; color: #1a1410; border-color: #ffb86b; }
+  .settings .diffsel button:disabled { opacity: .35; cursor: not-allowed; }
+  .settings .closebtn { background: #444; color: #fff; border: 0; padding: 8px 18px; border-radius: 5px; cursor: pointer; font-size: 12px; }
+  .settings .closebtn:hover { background: #555; }
+  .settings .locked { font-size: 10px; color: #e15a5a; text-align: center; letter-spacing: 1px; }
   /* start screen */
   #start {
     position: fixed; inset: 0;
@@ -237,7 +260,43 @@
 <body>
 <audio id="bgmTitle" src="assets/title.mp3" loop preload="auto"></audio>
 <audio id="bgmGame"  src="assets/overworld.mp3" loop preload="auto"></audio>
+<audio id="sfxHit"   src="assets/hit.mp3" preload="auto"></audio>
+<audio id="sfxCraft" src="assets/craft.mp3" preload="auto"></audio>
 <button id="muteBtn" onclick="window.__toggleMute()" title="Sesi aç/kapa">🔊</button>
+
+<!-- Start-screen settings (sound only) -->
+<div class="settings" id="settingsStart">
+  <h2>⚙ AYARLAR</h2>
+  <label>Müzik <span id="volMusicVal">35</span>%
+    <input type="range" min="0" max="100" value="35" id="volMusic">
+  </label>
+  <label>Efektler <span id="volSfxVal">70</span>%
+    <input type="range" min="0" max="100" value="70" id="volSfx">
+  </label>
+  <button class="closebtn" onclick="window.__closeSettings('start')">KAPAT</button>
+</div>
+
+<!-- In-game settings (sound + difficulty) -->
+<div class="settings" id="settingsGame">
+  <h2>⚙ AYARLAR</h2>
+  <label>Müzik <span id="volMusicVal2">35</span>%
+    <input type="range" min="0" max="100" value="35" id="volMusic2">
+  </label>
+  <label>Efektler <span id="volSfxVal2">70</span>%
+    <input type="range" min="0" max="100" value="70" id="volSfx2">
+  </label>
+  <div>
+    <div style="font-size:12px;color:#ccc;margin-bottom:6px">Zorluk:</div>
+    <div class="diffsel" id="diffSel">
+      <button data-d="easy">KOLAY</button>
+      <button data-d="normal">NORMAL</button>
+      <button data-d="hard">ZOR</button>
+      <button data-d="hardcore">HARDCORE</button>
+    </div>
+    <div class="locked" id="hardcoreLock" style="display:none">🔒 HARDCORE — zorluk kilitli</div>
+  </div>
+  <button class="closebtn" onclick="window.__closeSettings('game')">KAPAT</button>
+</div>
 <div id="gameover">
   <div class="skull">💀</div>
   <h1>OYUN BİTTİ</h1>
@@ -299,6 +358,7 @@
   <div class="sub">A SURVIVAL GAME · BY MIRROW</div>
   <div class="menu" id="mainMenu">
     <button onclick="window.__menu('play')">▶ OYNA</button>
+    <button onclick="window.__openSettings('start')">⚙ AYARLAR</button>
     <button onclick="window.__menu('credits')">CREDITS</button>
   </div>
   <div class="panel" id="diffPanel">
@@ -704,6 +764,7 @@ function craft(r) {
     addItem(r.id, q);
     showMsg('✓ ' + (q > 1 ? q + 'x ' : '') + ITEMS[r.id].name + ' üretildi');
   }
+  if (window.__sfxCraft) window.__sfxCraft();
   renderInv();
 }
 
@@ -725,7 +786,11 @@ cv.addEventListener('mousedown', function(e) {
 });
 
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') { closeChest(); return; }
+  if (e.key === 'Escape') {
+    closeChest();
+    if (gameStarted) toggleSettingsGame();
+    return;
+  }
   if (e.key >= '1' && e.key <= '8') {
     player.sel = parseInt(e.key) - 1;
     renderInv();
@@ -861,6 +926,7 @@ function interact(wp) {
       life: 0.9, dmg: 3, kind:'spear'
     });
     player.face = ang; player.hitCool = 0.4;
+    if (window.__sfxHit) window.__sfxHit();
     return;
   }
   // bow shoot — needs arrow
@@ -874,6 +940,7 @@ function interact(wp) {
       life: 1.4, dmg: 2, kind:'arrow'
     });
     player.face = ang; player.hitCool = 0.18;
+    if (window.__sfxHit) window.__sfxHit();
     return;
   }
   // fishing rod — click lake
@@ -921,6 +988,7 @@ function interact(wp) {
   check(zombies,'zombie');
   if (!best) return;
   player.hitCool = 0.35;
+  if (window.__sfxHit) window.__sfxHit();
   player.face = Math.atan2(best.y - player.y, best.x - player.x);
 
   if (bestType === 'tree') {
@@ -1896,7 +1964,21 @@ update = function(dt) { _origUpdate(dt); if (fishing) updateFishing(dt); };
 // ---------- Audio ----------
 var bgmTitle = document.getElementById('bgmTitle');
 var bgmGame  = document.getElementById('bgmGame');
-bgmTitle.volume = 0.35; bgmGame.volume = 0.30;
+var sfxHit   = document.getElementById('sfxHit');
+var sfxCraft = document.getElementById('sfxCraft');
+var musicVol = 0.35, sfxVol = 0.70;
+bgmTitle.volume = musicVol; bgmGame.volume = musicVol;
+sfxHit.volume = sfxVol; sfxCraft.volume = sfxVol;
+function applyVolumes() {
+  bgmTitle.volume = musicVol; bgmGame.volume = musicVol;
+  sfxHit.volume = sfxVol; sfxCraft.volume = sfxVol;
+}
+function playSfx(audio) {
+  if (muted) return;
+  try { audio.currentTime = 0; audio.play().catch(function(){}); } catch(e){}
+}
+window.__sfxHit   = function(){ playSfx(sfxHit); };
+window.__sfxCraft = function(){ playSfx(sfxCraft); };
 var muted = false, audioErr = false;
 var currentBgm = bgmTitle; // which track should be playing right now
 [bgmTitle, bgmGame].forEach(function(a){
@@ -1957,6 +2039,62 @@ window.__goBack = function() {
   document.getElementById('diffPanel').classList.remove('show');
   document.getElementById('creditPanel').classList.remove('show');
 };
+// ---------- Settings UI ----------
+function bindVolume(idMusic, idMusicVal, idSfx, idSfxVal) {
+  var m = document.getElementById(idMusic), mv = document.getElementById(idMusicVal);
+  var s = document.getElementById(idSfx),   sv = document.getElementById(idSfxVal);
+  m.value = Math.round(musicVol * 100); mv.textContent = m.value;
+  s.value = Math.round(sfxVol * 100);   sv.textContent = s.value;
+  m.oninput = function(){ musicVol = m.value/100; mv.textContent = m.value; applyVolumes();
+    // mirror to the other slider
+    var other = (idMusic==='volMusic') ? 'volMusic2' : 'volMusic';
+    var otherV = (idMusic==='volMusic') ? 'volMusicVal2' : 'volMusicVal';
+    var o = document.getElementById(other); if (o) { o.value = m.value; document.getElementById(otherV).textContent = m.value; }
+  };
+  s.oninput = function(){ sfxVol = s.value/100; sv.textContent = s.value; applyVolumes();
+    var other = (idSfx==='volSfx') ? 'volSfx2' : 'volSfx';
+    var otherV = (idSfx==='volSfx') ? 'volSfxVal2' : 'volSfxVal';
+    var o = document.getElementById(other); if (o) { o.value = s.value; document.getElementById(otherV).textContent = s.value; }
+  };
+}
+function refreshDiffButtons() {
+  var sel = document.getElementById('diffSel');
+  var locked = diff.lives === 1; // hardcore
+  document.getElementById('hardcoreLock').style.display = locked ? 'block' : 'none';
+  var btns = sel.querySelectorAll('button');
+  for (var i = 0; i < btns.length; i++) {
+    var b = btns[i];
+    b.classList.toggle('sel', diff === DIFFS[b.dataset.d]);
+    b.disabled = locked;
+    b.onclick = locked ? null : function(){
+      var d = this.dataset.d;
+      if (d === 'hardcore') return; // entering hardcore mid-run not allowed
+      diff = DIFFS[d];
+      livesLeft = diff.lives;
+      showMsg('Zorluk: ' + diff.label);
+      refreshDiffButtons();
+    };
+  }
+}
+window.__openSettings = function(which) {
+  if (which === 'start') {
+    bindVolume('volMusic','volMusicVal','volSfx','volSfxVal');
+    document.getElementById('settingsStart').classList.add('open');
+  } else {
+    bindVolume('volMusic2','volMusicVal2','volSfx2','volSfxVal2');
+    refreshDiffButtons();
+    document.getElementById('settingsGame').classList.add('open');
+  }
+};
+window.__closeSettings = function(which) {
+  document.getElementById(which === 'start' ? 'settingsStart' : 'settingsGame').classList.remove('open');
+};
+function toggleSettingsGame() {
+  var el = document.getElementById('settingsGame');
+  if (el.classList.contains('open')) el.classList.remove('open');
+  else window.__openSettings('game');
+}
+
 window.__menu = function(name) {
   document.getElementById('mainMenu').style.display = (name === 'main') ? 'flex' : 'none';
   document.getElementById('diffPanel').classList.toggle('show', name === 'play');
