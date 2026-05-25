@@ -2047,8 +2047,9 @@ function _tryPlay() { if (currentBgm.paused) playCurrent(); }
 var gameStarted = false;
 window.__goBack = function() {
   document.getElementById('gameover').classList.remove('show');
-  deleteSave();
-  refreshContinueBtn();
+  // gameover screen only triggers on hardcore death — save already wiped in respawn(),
+  // this is just belt-and-suspenders for hardcore. Normal mode never reaches here.
+  if (diff.lives === 1) { deleteSave(); refreshContinueBtn(); }
   playTitleMusic();
   // wipe state — fresh on next start
   trees.length = stones.length = rabbits.length = wolves.length = bears.length = 0;
